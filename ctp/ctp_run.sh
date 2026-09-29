@@ -1627,10 +1627,11 @@ write_shard_env() {
     printf 'JAVA_HOME=%q\n' "${JAVA_HOME:?JAVA_HOME is unset; run inside nix develop}"
     printf 'TZDIR=%q\n' "${TZDIR:?TZDIR is unset; run inside nix develop}"
     printf 'LOCALE_ARCHIVE=%q\n' "${LOCALE_ARCHIVE:-}"
+    # the exclusion file sits in the shard's CTP conf dir; shard_entry.sh resolves it
     if [ "$ARG_EXCLUDE_SET" -eq 1 ] && [ -z "$ARG_EXCLUDE" ]; then
-      printf 'EXCLUDE_SET=1\nEXCLUDE=\n'
+      printf 'EXCLUDE_NAME=\n'
     else
-      printf 'EXCLUDE_SET=1\nEXCLUDE=%q\n' "$C_CTP/conf/ctprun_exclusions.txt"
+      printf 'EXCLUDE_NAME=%q\n' "ctprun_exclusions.txt"
     fi
     printf 'EXTRA_ENV=%q\n' "$extra"
   } > "$d/shard.env"

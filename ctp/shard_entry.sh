@@ -117,10 +117,9 @@ set_conf_key() {
 
 cp -f "$CTP_HOME/$CONF_SRC" "$conf" || die "cannot derive $CTP_CONF from $CONF_SRC"
 set_conf_key scenario "$top/$TCREPO/$SUBPATH"
-if [ "$EXCLUDE_SET" = 1 ]; then
-  set_conf_key testcase_exclude_from_file "$EXCLUDE"
-fi
-step "conf: $CTP_CONF <- $CONF_SRC, scenario=$top/$TCREPO/$SUBPATH exclude=${EXCLUDE:-(none)}"
+exclude=${EXCLUDE_NAME:+$CTP_HOME/conf/$EXCLUDE_NAME}
+set_conf_key testcase_exclude_from_file "$exclude"
+step "conf: $CTP_CONF <- $CONF_SRC, scenario=$top/$TCREPO/$SUBPATH exclude=${exclude:-(none)}"
 
 [ -x "$CUBRID/bin/cubrid_rel" ] || die "no CUBRID at $CUBRID"
 step "cubrid_rel: $(cubrid_rel 2>&1 | tr -s '\n' ' ')"

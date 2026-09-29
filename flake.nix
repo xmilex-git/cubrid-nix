@@ -66,9 +66,18 @@
         locales = [ "en_US.UTF-8/UTF-8" "en_US/ISO-8859-1" "ko_KR.UTF-8/UTF-8" "ko_KR.EUC-KR/EUC-KR" ];
       };
 
+      perfConfig = pkgs.writeText "perfconfig" ''
+        [core]
+        	addr2line-timeout = 60000
+      '';
+
       # gdb reads CUBRID's threads through the libthread_db of the snapshot's glibc 2.28.
+      # `nix build` compiles in /build/source: with CUBRID_NIX_SRC set to the source it
+      # was exported to (just build prints it), gdb shows the source text too.
       gdb = pkgs.writeShellScriptBin "gdb" ''
-        exec ${pkgs.gdb}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' "$@"
+        sub=()
+        [ -z "''${CUBRID_NIX_SRC:-}" ] || sub=(-iex "set substitute-path /build/source $CUBRID_NIX_SRC")
+        exec ${pkgs.gdb}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' "''${sub[@]}" "$@"
       '';
     in
     {
@@ -93,8 +102,13 @@
           export CCACHE_DIR=''${CCACHE_DIR:-$HOME/.cache/ccache}
           # a Gradle home of its own: the seed puts the sealed repository in its init.d
           export GRADLE_USER_HOME=''${CUBRID_NIX_GRADLE_HOME:-$HOME/.cache/cubrid-nix/gradle-home}
+          export CUBRID_CI_SNAPSHOT=${snapshot}
           export TZDIR=${snapshot}/usr/share/zoneinfo
           export LOCALE_ARCHIVE=${ctpLocales}/lib/locale/locale-archive
+          # perf's addr2line needs more than its default time on CUBRID's 180 MB libraries
+          export PERF_CONFIG=${perfConfig}
+          # no debuginfod: other distributions' build-ids never match the snapshot's
+          export DEBUGINFOD_URLS=
           # for ctp/ctp_run.sh
           export CUBRID_NIX_CTP=${cubrid-testtools}/CTP
           export CUBRID_NIX_CTP_REV=${cubrid-testtools.shortRev or "unknown"}

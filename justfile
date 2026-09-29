@@ -42,7 +42,16 @@ shell-build worktree mode="optdebug" prefix="":
       "(builtins.getFlake \"{{justfile_directory()}}\").lib.x86_64-linux.sealedSeedFor \"$ws\"")
     "$seed" "$ws/build_x86_64_{{mode}}" "$GRADLE_USER_HOME"
     cd "$ws"
-    ./build.sh -m {{mode}} -p "$prefix" build
+    run=(./build.sh -m {{mode}} -p "$prefix" build)
+    # src/heaplayers/malloc_2_8_3.c includes /usr/include/malloc.h by absolute path, which
+    # --sysroot does not reach: unless the host's copy is the snapshot's (the CI's glibc
+    # 2.28), give it the snapshot's in a private mount namespace.
+    if cmp -s /usr/include/malloc.h "$CUBRID_CI_SNAPSHOT/usr/include/malloc.h"; then
+      "${run[@]}"
+    else
+      unshare -Urm bash -c 'mount -t tmpfs tmpfs /usr/include && ln -s "$1" /usr/include/malloc.h && shift && exec "$@"' \
+        _ "$CUBRID_CI_SNAPSHOT/usr/include/malloc.h" "${run[@]}"
+    fi
     echo "install: $prefix"
 
 # Record the sealed inputs a worktree needs in nix/sealed/lock.json (needs network)
