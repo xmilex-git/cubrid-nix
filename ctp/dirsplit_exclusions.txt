@@ -1,0 +1,53 @@
+# dirsplit_exclusions.txt — sql cases excluded from local runs split by cases dir
+# (the default since ADR 0017 D9), and only there: a --by-category run and CI
+# keep them. One scenario-relative entry per line (CTP containPath semantics,
+# like CTP's exclusions.txt), # comments. The runner adds these to the suite's
+# default list; a custom EXCLUDE=<file> replaces both, and EXCLUDE='' drops both.
+#
+# A case belongs here when a dir split makes it fail for a reason that is not
+# the change under test, and no cheap colocation undoes that. Two kinds so far:
+#   - its answer was recorded against CI's whole serial order;
+#   - a known engine defect the split's placement triggers (with its issue).
+# Each entry says which, and when it can go.
+
+# Lists db_class VCLASS rows with no ORDER BY, so the row order is the catalog
+# heap's free-slot history. test_vclass comes last only after CI's 481s of
+# _01_object before it. Alone, or after other dirs, it lands mid-list
+# (2026-09-24, develop c63a3b993 + testcases 4004f1e13; the latest develop).
+# Upstream fix: ORDER BY class_name in the case and its answer.
+_01_object/_10_system_table/_001_db_class/cases/1003.sql
+
+# Engine hang, not a TC defect: xmilex-git/workspace#350 (same as #164; the fix
+# lives only on the fork's cas-merge branch). The MERGE on the hash-partitioned t2
+# at the end of this case deadlocks a parallel sort worker against its leader on
+# the transaction's top-operation mutex. Run with a fresh server, as a dir split
+# can place it, it hangs every time (parallelism 24: 2/2, the default 4: 1/1).
+# After enough earlier cases it does not. Remove once #350 is fixed in develop.
+_23_apricot_qa/_01_sql_extension3/_06_merge_statement/cases/_20_adhoc_merge_1.sql
+
+# Found by the first full runs of the tuned 16-shard plan (2026-09-24, develop
+# c63a3b993). They fail identically on every run of that plan, and in CI order
+# they pass:
+# - example.sql: `create table t4` gets -494. An earlier dir on the shard left a
+#   t4 that some dir in between drops in CI order.
+_17_sql_extension2/_02_full_test/_07_aggregate_functions/_01_group_concat/cases/example.sql
+# - comment_on_table_index_01.sql: index comments listed with no ORDER BY, so
+#   their order is the catalog's history (the kind of case 1003 is).
+_27_banana_qa/issue_12367_comment/cases/comment_on_table_index_01.sql
+# - create_view_data_type.sql: the answer EXPECTS a -494 for an object that a CI
+#   predecessor leaves behind. On the shard that predecessor is elsewhere.
+_31_cherry/issue_22054_on_update/cases/create_view_data_type.sql
+# - cbrd_26104.sql: its answer holds the Query Plan of the internal query that
+#   reads the current user's groups. That query runs, and is traced, only while
+#   the authorization cache is cold, which depends on the cases before it.
+_36_guava/cbrd_26104/cases/cbrd_26104.sql
+
+# Reported by the dpin campaign session (2026-09-24, dpin-tc a225515f8253). Its
+# different case set gives a different 16-shard plan, which put other dirs in
+# front of these two. Both pass alone, in their dir, and in --by-category runs.
+# - _01_adhoc_update_stree.sql: two statements that should succeed get -494 (a
+#   leftover object from an earlier dir on the shard).
+_23_apricot_qa/_01_sql_extension3/_04_mutitable_update_delete/_01_multi_table_update/_03_adhoc/cases/_01_adhoc_update_stree.sql
+# - sleep_001.sql: two statements whose answer is -494 return a row instead. The
+#   state they fail on in CI order is not there.
+_27_banana_qa/issue_14217_sleep/cases/sleep_001.sql

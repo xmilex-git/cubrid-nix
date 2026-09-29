@@ -25,22 +25,26 @@
 | CTP 실행 도구 | nixpkgs 24.11 | 문제가 생기면 CI 테스트 이미지 버전으로 교체 |
 | 진단·캐시 | nixpkgs 24.11 | gdb 15.2, perf 6.6, ccache 4.10.2 |
 
-## 사용법 (구현 예정)
+## 사용법
 
 ```bash
-nix build .#cubrid-optdebug     # flake.lock에 고정된 develop을 빌드
-just build <워크트리> optdebug   # 워크트리를 빌드 (버전 번호 계산 포함)
-nix develop                     # 증분 빌드 셸: build.sh -m optdebug build
-just run <설치본>                 # 실행 디렉터리를 만들고 서버 기동
-just ctp sql PR=<n>             # CTP: unshare 샤드, volatile DB
+nix develop                                   # 이 셸 안에서 아래 레시피를 쓴다
+just build <워크트리> optdebug                  # nix build: 소스 배포본처럼 내보내 CI처럼 빌드
+just shell-build <워크트리> optdebug            # 워크트리에서 증분 빌드 (ccache)
+just smoke <설치본>                             # 실행 디렉터리에서 서버·csql·PL/CSQL
+just ctp sql <설치본> --pr <N>                  # CTP: unshare 샤드, volatile DB
+just seal <워크트리>                            # 봉인 목록 갱신 (네트워크 필요)
 ```
+
+`just build`의 결과는 `.scratch/install/<워크트리>-<mode>`에 링크된다. 워크트리는 서브모듈이 모두
+초기화돼 있어야 한다(CI처럼 cubridmanager 포함).
 
 ## 진행
 
-- [ ] P1 CI 툴체인 스냅샷(RPM)과 컴파일러 래퍼
-- [ ] P2 CI 버전 빌드 도구
-- [ ] P3 봉인 입력과 갱신 레시피
-- [ ] P4 CUBRID derivation(optdebug, release)
+- [x] P1 CI 툴체인 스냅샷(RPM)과 컴파일러 래퍼
+- [x] P2 CI 버전 빌드 도구
+- [x] P3 봉인 입력과 갱신 레시피
+- [x] P4 CUBRID derivation(optdebug, release)
 - [ ] P5 개발 셸과 ccache
 - [ ] P6 실행 디렉터리와 서버 스모크
 - [ ] P7 CTP 러너 이식

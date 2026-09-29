@@ -1,0 +1,22 @@
+{
+  "release": "8.10",
+  "source": "docker.io/cubridci/cubridci:test_rl8.10@sha256:79a344fc7664af48cd13b4b01bc54c059dd92ac2be812f2e4d9802234e06fb7e",
+  "note": "time zone and locale data of the CI test image; locale files must match the runtime glibc 2.28",
+  "rpms": [
+    {
+      "file": "glibc-langpack-en-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-7rKvjEtBFPGprx+Ghwy+s/i0j7b0nU6A7TF5TMIHZC8="
+    },
+    {
+      "file": "glibc-langpack-ko-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-y+gmKZUQMyuYrHNcKBmYxHQWJUI2joVgaMpJoXja/VE="
+    },
+    {
+      "file": "tzdata-2024a-1.el8.noarch.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-zOP9LKD8ZAI8IvmiQtkrv+NoVCnapksM55Vt4CXd4GY="
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# split.tsv — cases dirs too slow to sit whole on one shard (sql, dir mode).
+#
+# One "<cases dir>\t<parts>" per line (scenario-relative, ending in /cases,
+# TAB-separated). The runner cuts the dir into <parts> CONTIGUOUS chunks of equal
+# measured weight (baseline_weights.tsv), so every chunk keeps CQT's case order
+# within itself and each chunk goes to one shard. A dir that is keep-whole in
+# colocate.tsv cannot be listed here. Disable with --no-split; replace with
+# --split <file>.
+#
+# Why a dir is here: with 16 shards the ideal shard is ~167s of cases (develop
+# c63a3b993, 2,668s total), and a whole dir longer than that becomes the run's
+# critical path. Each entry must have passed as chunks in isolation before it is
+# listed (ADR 0017 D9).
+
+# 203s of 2,668s (develop c63a3b993, 16 shards, volatile) — 252 cases
+_01_object/_09_partition/_005_reorganization/cases	2

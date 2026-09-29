@@ -1,0 +1,152 @@
+{
+  "release": "8.10",
+  "source": "docker.io/cubridci/cubridci:build_rl8.10@sha256:f8ff31b3a5d7432cbf0f6e36ac82688f0cce0c961bbfc191ac2dc01612a8a887",
+  "note": "RPMs of the CI build image that reach the product: compiler, linker, libc and kernel headers, libstdc++, linked C libraries, code generators",
+  "rpms": [
+    {
+      "file": "binutils-2.30-123.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-D9ddwZqPyyHxqlZbfCYwi8HjyBWnlt19HsrxP4aGw6E="
+    },
+    {
+      "file": "cpp-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-+HH66PDqd3EeB9AoE/gA7p0oaWNKhZ7/35jaCh3aE/g="
+    },
+    {
+      "file": "elfutils-libelf-devel-0.190-2.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-XyNMjL3EgvChWw35H0qNkiz1EETNYyPRO6qdKjDK7uw="
+    },
+    {
+      "file": "flex-2.6.1-9.el8.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-BBYJJvPJV/9rtHG5fb7fQ4nsoaLY18rmftVeIydJCXQ="
+    },
+    {
+      "file": "gcc-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-EAH2tPV3ILSb0PzGTSteKQIP10dQYR9T9OgVq3nQk54="
+    },
+    {
+      "file": "gcc-c++-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-StQyGr39h/gvheElyHt/P4hJqir5cHwssa6KuGPcAv0="
+    },
+    {
+      "file": "glibc-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-+e4O2GEdG0QhrF+bN3rCODd+R0ZqqvB1gistgR8Bu98="
+    },
+    {
+      "file": "glibc-common-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-/vO1nAFOyNKIu++vND50wiWpZEgTwgeO2lNnmCWoZF4="
+    },
+    {
+      "file": "glibc-devel-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-o2LnOGfCFRzfGfb+L9xSDZs0FLn5IurD3nCGaUEcfmc="
+    },
+    {
+      "file": "glibc-gconv-extra-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-zVDLz+Iz/U5d7uQGv6J1034r7hXTQ+MdnU+NmHG6hbg="
+    },
+    {
+      "file": "glibc-headers-2.28-251.el8_10.40.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-E3xLS7QHT8o8Ubtk+BsZNVfv1fDkqrna+ogEnBNreNo="
+    },
+    {
+      "file": "gmp-6.1.2-12.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-346+Kfziw+QxvLX7Fp/41yy5Uqq7lFqN3Qz7GnkAB48="
+    },
+    {
+      "file": "isl-0.16.1-6.el8.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-DdujaNKsIDpJoHeLTZtAF4B+8ikotTEwcMwd8193gks="
+    },
+    {
+      "file": "kernel-headers-4.18.0-553.159.1.el8_10.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-a+u5p4wPAE06L9cXDb+tCpuadUZ9CLWET5g2gvJWENo="
+    },
+    {
+      "file": "libgcc-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-ifmM/1aVX53Ell3t43ScO5zs0tYmtJMRJ3bEFshlwHI="
+    },
+    {
+      "file": "libgomp-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-iGnVD/V6Ppc+21NG5C7pYaYH3+/Xgrl9TbhE8zuNu40="
+    },
+    {
+      "file": "libmpc-1.1.0-9.1.el8.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-T791FwI5QhGJavnyU60vOMgPYD4Aenye0rnI5dl/L5U="
+    },
+    {
+      "file": "libstdc++-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-hbATITr86ApfIsrm8XqgDGsY/P6SODmkoeMeku1bFQ8="
+    },
+    {
+      "file": "libstdc++-devel-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-TP+QsX+P5HU0yeUg873LkyaD2FneMA6zDJlLFPYareI="
+    },
+    {
+      "file": "libstdc++-static-8.5.0-28.el8_10.x86_64.rpm",
+      "repo": "PowerTools",
+      "hash": "sha256-zPAK8Z8e5zykIr2B+Ar9CgM1r+QwAjemGWb9F94WegQ="
+    },
+    {
+      "file": "libxcrypt-4.1.1-6.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-2kc0f+jBKoPaSz3BQTlhcvgs3hRTC3dGssCIJlHxpGg="
+    },
+    {
+      "file": "libxcrypt-devel-4.1.1-6.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-cSQrfONMutwOsRfkYIiH3dZCNufoCPtZP5s9fMzcvEA="
+    },
+    {
+      "file": "m4-1.4.18-7.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-14gak9gt61Lq8J75xxJgBQIG4MZ0py36ddB+2bzctIk="
+    },
+    {
+      "file": "mpfr-3.1.6-1.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-ZClNh/QMXnrH2309fUuAt95qi5qOvU78oQT7tVj7y5Q="
+    },
+    {
+      "file": "ncurses-c++-libs-6.1-10.20180224.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-pTVzRv3J56Kw9NqjqcqI28qVtFAd5QuwQOpGq8Tug4k="
+    },
+    {
+      "file": "ncurses-devel-6.1-10.20180224.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-Btr1Iyb14kM7xDCcSEIxjQO2zVB5rRKvXy37Ye9JoPc="
+    },
+    {
+      "file": "ncurses-libs-6.1-10.20180224.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-xCmuRqRcjmU2EkXsi1D1U6E9TDOWZe6f4iR5clcfKCo="
+    },
+    {
+      "file": "systemtap-sdt-devel-4.9-3.el8.x86_64.rpm",
+      "repo": "AppStream",
+      "hash": "sha256-bVIkPS5Qn5ZSeKs8EHq5a4dd1AWkqEQnff9s3lmnbrY="
+    },
+    {
+      "file": "zlib-1.2.11-26.el8.x86_64.rpm",
+      "repo": "BaseOS",
+      "hash": "sha256-hEZSUeqHkLPYocML38jxFxH/6QYL7LczXhtQ9Cd8UWI="
+    }
+  ]
+}

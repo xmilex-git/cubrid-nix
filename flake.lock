@@ -1,0 +1,67 @@
+{
+  "nodes": {
+    "cubrid-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790697051,
+        "narHash": "sha256-PQJyYgHfJRxTU6LcfP8ieUYhZz0gEc7vFG9Kd7VnCyk=",
+        "ref": "develop",
+        "rev": "35f528e89f9918ec0ac1a272c0da4fec67c51078",
+        "shallow": true,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/CUBRID/cubrid.git"
+      },
+      "original": {
+        "ref": "develop",
+        "shallow": true,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/CUBRID/cubrid.git"
+      }
+    },
+    "cubrid-testtools": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790647833,
+        "narHash": "sha256-/7WHSkLWr0WXtu+iP8yxGYyQjOYSlDsbBDmASONjiiE=",
+        "ref": "develop",
+        "rev": "4d0043a7b149b3fc5d3ccb2e08c98cf8d77b34fb",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/CUBRID/cubrid-testtools.git"
+      },
+      "original": {
+        "ref": "develop",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/CUBRID/cubrid-testtools.git"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1751274312,
+        "narHash": "sha256-/bVBlRpECLVzjV19t5KMdMFWSwKLtb5RyXdjz3LJT+g=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "50ab793786d9de88ee30ec4e4c24fb4236fc2674",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-24.11",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "cubrid-src": "cubrid-src",
+        "cubrid-testtools": "cubrid-testtools",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

@@ -190,3 +190,29 @@ workspace 호스트의 기존 흐름(`just build`, podman 기반 `just ctp`)은 
 이 ADR과 `CONTEXT.md`가 결정과 용어의 원본이다. workspace의 `CONTEXT.md`에는 이 레포를 가리키는
 포인터만 둔다. workspace 용어집의 **샤드**는 "컨테이너 1개"와 1:1이지만, 이 레포에서는 "격리 단위
 (`unshare` 네임스페이스) 1개"와 1:1이다.
+
+## 구현 메모 (2026-09-30, P1–P4 게이트)
+
+결정은 그대로이고, 구현하며 확인한 사실만 적는다.
+
+- **D4 스냅샷의 RPM은 30개다.** 처음 목록에 CI 빌드 이미지에 있는 두 개를 더했다.
+  - `glibc-gconv-extra`: 메시지 카탈로그를 EUC-KR로 바꾸는 `iconv`가 쓴다.
+  - `elfutils-libelf-devel`: `src/base/dynamic_load.h`가 `nlist.h`를 쓴다.
+  - 두 파일 모두 CI 이미지의 것과 헤더 SHA256이 같다.
+- **D6 빌드는 소스 사본만 고친다.** 엔진 저장소는 건드리지 않는다.
+  - `VERSION-DIST` 세 개를 쓴다. 기본 flake 입력일 때는 `build.sh`처럼 `0000-unknown`이다.
+  - `src/heaplayers/malloc_2_8_3.c`의 `#include "/usr/include/malloc.h"`를 `<malloc.h>`로 바꾼다. 같은 glibc 2.28 헤더가 `--sysroot`를 통해 들어온다.
+  - 샌드박스에는 `/usr/bin/env`가 없어서, 빌드 중에 풀리는 OpenSSL `Configure` 등의 shebang을 위해 링크를 만든다.
+- **D6 JNI 헤더는 Temurin 8u442의 것이다.** 엔진 CMake는 configure 시점에 아직 풀리지 않은 빌드 트리의 JDK를 가리킨다. 그래서 시드가 봉인된 JDK를 미리 풀어 둔다. CI에서는 FindJNI가 시스템 OpenJDK 8u504의 헤더를 찾는데, JDK 8의 JNI 헤더는 업데이트 사이에 바뀌지 않는다.
+- **D7 봉인 목록의 Maven 파일은 71개다.** Maven Central에서 67개, Gradle 플러그인 포털에서 foojay 플러그인 4개다. 자동 탐지를 끈 Gradle이 JDK를 찾도록 `org.gradle.java.installations.fromEnv=JAVA_HOME`을 둔다.
+- **D5 perl 5.26.3은 소스에서 세 군데를 손봤다.** Configure가 gcc 13을 gcc 1로 오인해 `-fno-strict-aliasing`를 빼는 버그, `errno.h` 경로, 샌드박스에 없는 `/bin/pwd`다. CI의 perl은 gcc 8로 빌드돼 첫 번째 버그를 밟지 않는다.
+- **결과(develop `35f528e89`, 64코어):**
+  - optdebug는 169초, release는 164초에 빌드된다. release는 `-Werror`로 통과하며 `src/`의 경고는 0건이다.
+  - ELF 131개가 모두 스냅샷 로더와 RPATH를 쓰고, RUNPATH는 0건이다.
+  - `cub_manager`가 포함된다(CI처럼 서브모듈 전부).
+  - `cubrid_rel`은 `11.5.0.2629-35f528e`다.
+- **D10 심볼(host 설치본, 같은 gcc 8.5.0-28):**
+  - perf 6.6은 CUBRID 함수를 이름과 인라인 프레임까지 보여 준다. 프레임 포인터 호출 체인도 된다.
+  - gdb 15.2는 코어에서 파일·줄·인자를 보여 준다.
+  - perf의 addr2line 기본 제한 시간은 180 MB짜리 라이브러리에 짧아서 60초로 둔다.
+  - `nix build` 결과물의 소스 경로는 `/build/source`이므로 gdb에 `substitute-path`가 필요하다.
