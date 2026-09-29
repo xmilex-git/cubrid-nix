@@ -1,0 +1,6 @@
+# nix build output links
+result
+result-*
+# local scratch (logs, cores, measurements)
+.scratch/
+.direnv/
