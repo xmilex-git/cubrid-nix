@@ -208,7 +208,9 @@ workspace 호스트의 기존 흐름(`just build`, podman 기반 `just ctp`)은 
 - **D5 perl 5.26.3은 소스에서 세 군데를 손봤다.** Configure가 gcc 13을 gcc 1로 오인해 `-fno-strict-aliasing`를 빼는 버그, `errno.h` 경로, 샌드박스에 없는 `/bin/pwd`다. CI의 perl은 gcc 8로 빌드돼 첫 번째 버그를 밟지 않는다.
 - **결과(develop `35f528e89`, 64코어):**
   - optdebug는 169초, release는 164초에 빌드된다. release는 `-Werror`로 통과하며 `src/`의 경고는 0건이다.
-  - ELF 131개가 모두 스냅샷 로더와 RPATH를 쓰고, RUNPATH는 0건이다.
+  - CUBRID의 ELF 37개가 모두 스냅샷 로더와 RPATH를 쓰고, RUNPATH는 0건이다. `vm/jdk8` 아래 94개는
+    Temurin tarball의 파일 그대로다(CI 설치본과 같다: `install(DIRECTORY)`가 실행 비트를 떨어뜨려
+    아무도 실행하지 않고, cub_pl이 `libjvm.so`를 프로세스 안에 올린다).
   - `cub_manager`가 포함된다(CI처럼 서브모듈 전부).
   - `cubrid_rel`은 `11.5.0.2629-35f528e`다.
 - **D10 심볼(host 설치본, 같은 gcc 8.5.0-28):**
@@ -216,3 +218,25 @@ workspace 호스트의 기존 흐름(`just build`, podman 기반 `just ctp`)은 
   - gdb 15.2는 코어에서 파일·줄·인자를 보여 준다.
   - perf의 addr2line 기본 제한 시간은 180 MB짜리 라이브러리에 짧아서 60초로 둔다.
   - `nix build` 결과물의 소스 경로는 `/build/source`이므로 gdb에 `substitute-path`가 필요하다.
+
+## 구현 메모 (2026-09-30, P5–P7 게이트)
+
+- **CTP(D8):** develop `35f528e89`의 optdebug 설치본으로 테스트케이스 develop `7bd8ebbc`를 돌렸다.
+  - sql은 16샤드로 17,463건 모두 통과했다(301초).
+  - medium은 975건 모두 통과했다(189초).
+  - 코어와 hang은 0건이었다.
+  - 이 엔진 커밋의 CI 테스트는 아직 없다. 바로 앞 커밋 `f1bd99ed4`의 nightly는 sql 17,471건(dirsplit
+    제외 8건 포함)과 medium 975건을 모두 통과했고, 건수가 같다.
+- **러너가 겪은 것:**
+  - 샤드들이 같은 포트를 쓰므로 master 소켓 기본값 `/tmp/CUBRID<port>`가 샤드 사이에 겹친다. 그래서
+    샤드마다 `CUBRID_TMP=$CUBRID/var/CUBRID_SOCK`을 둔다.
+  - 샤드는 빈 환경(`exec -c`)에서 시작해 `shard.env`만 받는다. 호출한 쪽의 `CUBRID_TMP`,
+    `LD_LIBRARY_PATH`, 자격 증명 변수가 새어 들지 않는다.
+  - 샤드는 디스크 위에 자기 `/tmp`를 갖는다.
+  - `/home`에 tmpfs를 올리면 `/home` 아래에 있던 샤드 경로가 가려진다. 그래서 로그는 파일 디스크립터로
+    먼저 열어 둔다.
+- **스모크(D2):** optdebug와 release 모두 서버, csql, PL/CSQL(JVM이 42를 돌려준다)을 통과했다. 떠 있는
+  `cub_server`에 perf를 붙이면 CUBRID 함수가 이름으로 나오고, 프레임 포인터 호출 체인도 된다.
+- **증분 빌드(D3):** 파일 하나를 고친 재빌드는 71초다. 빌드 트리를 지우고 다시 빌드하면 ccache 적중률이
+  98%다. 호스트의 `/usr/include/malloc.h`가 스냅샷의 것과 같으면 그대로 쓰고, 다르면 mount 네임스페이스로
+  스냅샷의 것을 보인다.

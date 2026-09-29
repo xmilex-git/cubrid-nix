@@ -5,7 +5,10 @@
 # - conf and databases are copies, because CUBRID and CTP edit and append to them;
 # - bin's programs are wrappers that give CUBRID processes, and only them, the locale
 #   and gconv data of the snapshot's glibc 2.28 (ADR 0001 D9): programs on another
-#   glibc must not read those files.
+#   glibc must not read those files;
+# - the env file gives the run directory its own socket directory: the master's unix
+#   socket lives in $CUBRID_TMP (default /tmp, or the caller's own CUBRID_TMP, which may
+#   name a live installation's directory), and its path is limited to 108 bytes.
 # Prints the path of the env file to source.
 set -euo pipefail
 
@@ -32,6 +35,7 @@ for d in conf databases; do
   fi
 done
 mkdir -p "$run/databases" "$run/log" "$run/tmp" "$run/var"
+sock=${XDG_RUNTIME_DIR:-/tmp}/cn-$(printf '%s' "$run" | cksum | cut -d' ' -f1)
 
 for f in "$inst"/bin/*; do
   [ -f "$f" ] && [ "$(head -c 4 "$f" | od -An -c | tr -d ' ')" = '177ELF' ] || continue
@@ -45,7 +49,10 @@ done
 cat > "$run/cubrid.env" <<EOF
 export CUBRID=$run
 export CUBRID_DATABASES=$run/databases
+export CUBRID_TMP=$sock
+mkdir -p "\$CUBRID_TMP"
 export PATH=$run/bin:\$PATH
 export TZDIR=$snap/usr/share/zoneinfo
+unset LD_LIBRARY_PATH
 EOF
 echo "$run/cubrid.env"

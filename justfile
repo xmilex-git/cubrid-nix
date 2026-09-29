@@ -39,7 +39,7 @@ shell-build worktree mode="optdebug" prefix="":
     missing=$(git -C "$ws" submodule status | awk '/^-/ { print $2 }' | tr '\n' ' ')
     [ -z "$missing" ] || { echo "uninitialized submodules (the CI builds them all): $missing" >&2; exit 1; }
     seed=$({{nix}} build --no-link --print-out-paths --impure --expr \
-      "(builtins.getFlake \"{{justfile_directory()}}\").lib.x86_64-linux.sealedSeedFor \"$ws\"")
+      "(builtins.getFlake \"git+file://{{justfile_directory()}}\").lib.x86_64-linux.sealedSeedFor \"$ws\"")
     "$seed" "$ws/build_x86_64_{{mode}}" "$GRADLE_USER_HOME"
     cd "$ws"
     run=(./build.sh -m {{mode}} -p "$prefix" build)
@@ -65,7 +65,7 @@ ctp suite install *args:
     #!/usr/bin/env bash
     set -euo pipefail
     tc="${CUBRID_NIX_TESTCASES:-{{scratch}}/testcases/cubrid-testcases}"
-    if [ ! -d "$tc/.git" ]; then
+    if [ ! -e "$tc/.git" ]; then
       mkdir -p "$(dirname "$tc")"
       git clone --filter=blob:none https://github.com/CUBRID/cubrid-testcases.git "$tc"
     fi

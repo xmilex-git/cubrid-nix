@@ -13,17 +13,24 @@
 set -euo pipefail
 
 d=${1:?usage: shard_entry.sh <shard dir>}
+# ctp_run.sh starts this with an empty environment (exec -c): nothing of the caller's
+# (its CUBRID_TMP or LD_LIBRARY_PATH, credentials) reaches CTP; shard.env holds all.
 # shellcheck source=/dev/null
 . "$d/shard.env"
+export PATH=$TOOLS_PATH
 
 # Everything the shard prints goes to console.log and, with a timestamp per line, to
 # console.ts.log (the runner's hang watchdog and timing read them). PID 1's exit kills
 # the whole namespace, so the exit trap waits for the filter to write the last lines.
+# The logs are opened here, not by path per line: with the shard under /home, the tmpfs
+# mounted on /home below hides that path from this mount namespace.
+exec 3>> "$d/console.log" 4>> "$d/console.ts.log"
 exec > >(while IFS= read -r line; do
-           printf '%s\n' "$line" >> "$d/console.log"
-           printf '%(%Y-%m-%dT%H:%M:%S%z)T %s\n' -1 "$line" >> "$d/console.ts.log"
+           printf '%s\n' "$line" >&3
+           printf '%(%Y-%m-%dT%H:%M:%S%z)T %s\n' -1 "$line" >&4
          done) 2>&1
 filter=$!
+exec 3>&- 4>&-
 trap 'exec >&- 2>&-; wait "$filter" 2>/dev/null' EXIT
 
 step() { printf '[shard] %s %s\n' "$(date -u +%FT%T.%3NZ)" "$*"; }
@@ -41,7 +48,8 @@ if [ "$DIRECT" = 1 ]; then
   ln -sfn ../testcases "$top/$TCREPO"
   ln -sfn ../CUBRID_DB "$top/CUBRID_DB"
   ln -sfn ../reports "$top/reports"
-  export CUBRID_TMP
+  export CUBRID_TMP TMPDIR=$d/tmp
+  mkdir -p "$TMPDIR"
   CUBRID_TMP=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/cn.XXXXXX")
   step "direct layout at $top (no namespaces), CUBRID_TMP=$CUBRID_TMP"
 else
@@ -63,6 +71,9 @@ else
   # The CI container's layout. The shard dir is staged on /mnt first: the tmpfs on /home
   # would hide it when it lives under /home.
   mount --bind "$d" /mnt || die "stage the shard on /mnt"
+  d=/mnt   # $d may be under /home, which the tmpfs below hides
+  # a private /tmp on the shard's disk, as the CI container has its own
+  mkdir -p /mnt/tmp && mount --bind /mnt/tmp /tmp || die "private /tmp"
   mount -t tmpfs -o mode=755 tmpfs /home || die "tmpfs /home"
   mkdir -p /home/CUBRID /home/cubrid-testtools/CTP "/home/$TCREPO" /home/CUBRID_DB /home/reports
   mount --bind /mnt/CUBRID /home/CUBRID
@@ -86,7 +97,13 @@ fi
 # --- the CI test image's environment --------------------------------------------------
 export HOME=$top WORKDIR=$top CUBRID=$top/CUBRID CTP_HOME=$top/cubrid-testtools/CTP
 export CUBRID_DATABASES=$top/CUBRID_DB TEST_REPORT=$top/reports
+# The master's unix socket defaults to /tmp/CUBRID<port>, which every shard shares (same
+# ports in every shard): a second master unlinks the first one's socket. Keep it in the
+# shard (the direct layout has its own CUBRID_TMP above).
+[ "$DIRECT" = 1 ] || export CUBRID_TMP=$CUBRID/var/CUBRID_SOCK
 export TZ=Asia/Seoul LANG=en_US.UTF-8 LC_ALL=en_US CTP_SKIP_UPDATE=1 CTP_BRANCH_NAME=develop
+export USER LOGNAME
+USER=$(id -un); LOGNAME=$USER
 export PATH="$CUBRID/bin:$CTP_HOME/bin:$CTP_HOME/common/script:$TOOLS_PATH"
 export JAVA_HOME TZDIR LOCALE_ARCHIVE
 if [ -n "${EXTRA_ENV:-}" ]; then

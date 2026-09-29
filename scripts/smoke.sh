@@ -8,6 +8,7 @@ set -euo pipefail
 
 . "${1:?usage: smoke.sh <run dir>/cubrid.env [db]}"
 db=${2:-smokedb}
+cd "$CUBRID/tmp"   # csql writes csql.err into its working directory
 log=$CUBRID/log/smoke.log
 sql=$CUBRID/tmp/smoke.sql
 

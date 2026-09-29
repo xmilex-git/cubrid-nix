@@ -264,7 +264,7 @@ parse_args() {
     HANG_SECS=0
   fi
   if [ -z "$ARG_OUT" ]; then
-    ARG_OUT="$(bash "$SELF_DIR/artifact_root.sh")/$ARG_SUITE-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    ARG_OUT="$REPO_DIR/.scratch/ctp/$ARG_SUITE-$(date -u +%Y%m%dT%H%M%SZ)-$$"
   fi
   # Both MUST be absolute before anything uses them. `git worktree add` resolves a
   # relative path against the REPOSITORY, not the invocation cwd, so a relative
@@ -673,7 +673,7 @@ resolve_colocate() {
   local src=""
   case "$ARG_COLOCATE" in
     "")   info "colocate: disabled (--no-colocate)."; return 0 ;;
-    auto) local bundled="$SELF_DIR/../colocate.tsv"
+    auto) local bundled="$SELF_DIR/colocate.tsv"
           # bundled registry lists sql/ cases dirs only; meaningless for another suite
           [ "$ARG_SUITE" = "sql" ] && [ -r "$bundled" ] && src="$bundled" ;;
     *)    [ -r "$ARG_COLOCATE" ] || die "--colocate file not readable: $ARG_COLOCATE"; src="$ARG_COLOCATE" ;;
@@ -723,7 +723,7 @@ pin_header() {                     # pin_header <file> <key>: a key=value of its
   awk -v k="$2" '/^# shards=/ { for (i=2;i<=NF;i++) { split($i,kv,"="); if (kv[1]==k) { print kv[2]; exit } } }' "$1"
 }
 resolve_pin() {
-  local src="" bundled="$SELF_DIR/../plan_pin.tsv" n
+  local src="" bundled="$SELF_DIR/plan_pin.tsv" n
   case "$ARG_PIN" in
     "")   PLAN_LABEL="lpt (--no-plan-pin)"; return 0 ;;
     auto) [ "$ARG_SUITE" = "sql" ] && [ "$ARG_UNIT" = "dir" ] && [ "${#ARG_ONLY[@]}" -eq 0 ] \
@@ -789,7 +789,7 @@ resolve_split() {
   local src="" d k
   case "$ARG_SPLIT" in
     "")   return 0 ;;
-    auto) [ "$ARG_SUITE" = "sql" ] && [ -r "$SELF_DIR/../split.tsv" ] && src="$SELF_DIR/../split.tsv" ;;
+    auto) [ "$ARG_SUITE" = "sql" ] && [ -r "$SELF_DIR/split.tsv" ] && src="$SELF_DIR/split.tsv" ;;
     *)    [ -r "$ARG_SPLIT" ] || die "--split file not readable: $ARG_SPLIT"; src="$ARG_SPLIT" ;;
   esac
   [ -n "$src" ] || return 0
@@ -818,7 +818,7 @@ resolve_weights() {
   case "$ARG_WEIGHTS" in
     none|"") WEIGHTS_FILE=""; info "weights: count-based (--no-weights)." ;;
     auto)
-      local bundled="$SELF_DIR/../baseline_weights.tsv"
+      local bundled="$SELF_DIR/baseline_weights.tsv"
       if [ "$ARG_SUITE" != "sql" ]; then
         WEIGHTS_FILE=""; info "weights: bundled table is sql-only; count-based for suite '$ARG_SUITE'."
       elif [ -r "$bundled" ]; then
@@ -866,7 +866,9 @@ BASE_FILE=""       # the original CTP exclusions.txt (verbatim base list)
 # split invariant) disagrees with what CTP actually runs.
 suite_base_exclusion_file() {
   case "$ARG_SUITE" in
-    sql|medium) printf '%s' "$ARG_CTP/conf/exclusions.txt" ;;
+    # cubrid-testtools does not track conf/exclusions.txt (a host may keep an empty
+    # one): without it the base list is empty, as in the CI image.
+    sql|medium) if [ -r "$ARG_CTP/conf/exclusions.txt" ]; then printf '%s' "$ARG_CTP/conf/exclusions.txt"; else printf '%s' /dev/null; fi ;;
     shell|ha_shell) printf '%s' "$SCN/config/daily_regression_test_excluded_list_linux.conf" ;;
   esac
 }
@@ -874,7 +876,7 @@ suite_base_exclusion_file() {
 # The dir-split exclusion list when it applies (sql, split by cases dir, suite
 # default exclusions), else nothing.
 dirsplit_exclusions_file() {
-  local f="$SELF_DIR/../dirsplit_exclusions.txt"
+  local f="$SELF_DIR/dirsplit_exclusions.txt"
   if [ "$ARG_SUITE" = "sql" ] && [ "$ARG_UNIT" = "dir" ] && [ "$ARG_EXCLUDE_SET" -eq 0 ] && [ -r "$f" ]; then
     printf '%s' "$f"
   fi
@@ -1651,10 +1653,12 @@ launch_shard() {
   if [ "$NS_MODE" -eq 1 ]; then
     # --kill-child: when unshare dies, the shard's PID 1 dies, and with it every process
     # of the shard's PID namespace.
-    unshare -Urmipnf --mount-proc --kill-child bash "$SELF_DIR/shard_entry.sh" "$d" \
-      </dev/null >"$d/launch.log" 2>&1 &
+    # exec -c: the shard starts with an empty environment; shard.env is all it gets
+    unshare -Urmipnf --mount-proc --kill-child "$BASH" -c 'exec -c "$0" "$@"' \
+      "$BASH" "$SELF_DIR/shard_entry.sh" "$d" </dev/null >"$d/launch.log" 2>&1 &
   else
-    bash "$SELF_DIR/shard_entry.sh" "$d" </dev/null >"$d/launch.log" 2>&1 &
+    "$BASH" -c 'exec -c "$0" "$@"' "$BASH" "$SELF_DIR/shard_entry.sh" "$d" \
+      </dev/null >"$d/launch.log" 2>&1 &
   fi
   SHARD_PIDS[i]=$!
 }

@@ -45,7 +45,7 @@ just seal <워크트리>                            # 봉인 목록 갱신 (네�
 - [x] P2 CI 버전 빌드 도구
 - [x] P3 봉인 입력과 갱신 레시피
 - [x] P4 CUBRID derivation(optdebug, release)
-- [ ] P5 개발 셸과 ccache
-- [ ] P6 실행 디렉터리와 서버 스모크
-- [ ] P7 CTP 러너 이식
+- [x] P5 개발 셸과 ccache
+- [x] P6 실행 디렉터리와 서버 스모크
+- [x] P7 CTP 러너 이식
 - [ ] P8 클린룸 검증(권한 있음/기본 권한)과 근거표

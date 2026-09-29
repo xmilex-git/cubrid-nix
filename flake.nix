@@ -103,6 +103,10 @@
           # a Gradle home of its own: the seed puts the sealed repository in its init.d
           export GRADLE_USER_HOME=''${CUBRID_NIX_GRADLE_HOME:-$HOME/.cache/cubrid-nix/gradle-home}
           export CUBRID_CI_SNAPSHOT=${snapshot}
+          # scratch on disk, not a tmpfs /tmp; builds from this shell carry their real date
+          export TMPDIR=$HOME/.cache/cubrid-nix/tmp TMP=$HOME/.cache/cubrid-nix/tmp TEMP=$HOME/.cache/cubrid-nix/tmp
+          mkdir -p "$TMPDIR"
+          unset SOURCE_DATE_EPOCH
           export TZDIR=${snapshot}/usr/share/zoneinfo
           export LOCALE_ARCHIVE=${ctpLocales}/lib/locale/locale-archive
           # perf's addr2line needs more than its default time on CUBRID's 180 MB libraries
