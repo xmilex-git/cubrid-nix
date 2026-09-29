@@ -38,11 +38,13 @@ EOF
   dev true
   mark devshell_ready
 
-  dev git clone -q https://github.com/CUBRID/cubrid.git "$HOME/cubrid"
+  # build.sh numbers the version by the commits since 2019-12-12: that much history suffices
+  dev git clone -q --shallow-since=2019-12-01 https://github.com/CUBRID/cubrid.git "$HOME/cubrid"
   dev git -C "$HOME/cubrid" checkout -q "$ENGINE_REV"
   dev git -C "$HOME/cubrid" submodule update -q --init
   mark engine_cloned
-  dev git clone -q https://github.com/CUBRID/cubrid-testcases.git "$HOME/cubrid-testcases"
+  # one commit of develop: offline, the runner resolves the ref from the local branch
+  dev git clone -q --depth 1 -b develop https://github.com/CUBRID/cubrid-testcases.git "$HOME/cubrid-testcases"
   mark testcases_cloned
 
   dev "$HOME/cubrid-nix/scripts/export-source.sh" "$HOME/cubrid" "$SRC"

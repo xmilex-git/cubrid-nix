@@ -15,7 +15,9 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 base=$repo/.scratch/cleanroom/$mode-$(date -u +%Y%m%dT%H%M%SZ)
 mkdir -p "$base/nix" "$base/home" "$base/cores"
 
-podman build -q -t localhost/cubrid-nix-cleanroom:base "$repo/cleanroom" > "$base/image.txt"
+# host networking while downloading: an HTTP proxy on the host's loopback (if any) must
+# stay reachable, and podman passes the proxy variables through
+podman build -q --network=host -t localhost/cubrid-nix-cleanroom:base "$repo/cleanroom" > "$base/image.txt"
 
 args=(--rm --cgroupns=private --userns=keep-id --user "$(id -u):$(id -g)"
       -e HOME=/home/cn -e USER="$(id -un)" -w /home/cn
@@ -27,7 +29,7 @@ case "$pat" in /*) args+=(-v "$base/cores:$(dirname "$pat")") ;; esac
 [ "$mode" = full ] && args+=(--privileged)
 
 t0=$(date +%s)
-podman run "${args[@]}" localhost/cubrid-nix-cleanroom:base bash /cleanroom/inside.sh prepare "$mode" \
+podman run "${args[@]}" --network=host localhost/cubrid-nix-cleanroom:base bash /cleanroom/inside.sh prepare "$mode" \
   > "$base/prepare.log" 2>&1 || { echo "prepare failed: $base/prepare.log" >&2; exit 1; }
 t1=$(date +%s)
 podman run "${args[@]}" --network=none localhost/cubrid-nix-cleanroom:base bash /cleanroom/inside.sh verify "$mode" \
