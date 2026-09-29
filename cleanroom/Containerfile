@@ -1,0 +1,5 @@
+# The clean room (ADR 0001 D12): a bare Ubuntu with only what the nix installer needs.
+FROM docker.io/library/ubuntu:24.04
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl xz-utils ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
