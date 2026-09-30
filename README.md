@@ -190,12 +190,12 @@ just seal ~/cubrid
 `nix develop`이 도구를 빌드하지 않고 이 캐시에서 받는다.
 
 ```
-extra-substituters = http://<캐시 주소>
+extra-substituters = http://192.168.6.4
 extra-trusted-public-keys = cubrid-nix-cache-1:9tHaV41AhMl1GxTpdkaMjzH+V3/FiXx2F4hto1pcd+U=
 ```
 
 - 캐시에 닿지 않는 머신에는 이 줄을 넣지 않는다. nix가 연결을 기다리느라 느려진다.
-- HTTP 프록시를 쓰는 환경이면 캐시 주소를 `no_proxy`에도 넣는다.
+- HTTP 프록시를 쓰는 환경이면 `no_proxy`에 `192.168.6.4`를 더한다.
 - 클린룸 콜드 스타트는 캐시 없이 12–18분이었고, 캐시를 쓰니 270초였다.
   - 그중 `nix develop` 단계는 10–15분에서 23초가 됐다.
   - 나머지는 nix 설치와 엔진·테스트케이스 clone이다.
