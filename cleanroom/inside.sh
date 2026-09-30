@@ -23,7 +23,10 @@ override=(--override-input cubrid-src "path:$SRC")
 
 if [ "$phase" = prepare ]; then
   mark start
-  curl -fsSL https://releases.nixos.org/nix/nix-2.35.2/install | sh -s -- --no-daemon
+  # the latest stable nix, as the README installs it; CLEANROOM_NIX_VERSION pins one
+  nix_url=https://nixos.org/nix/install
+  [ -z "${CLEANROOM_NIX_VERSION:-}" ] || nix_url=https://releases.nixos.org/nix/nix-$CLEANROOM_NIX_VERSION/install
+  curl -fsSL "$nix_url" | sh -s -- --no-daemon
   mkdir -p "$HOME/.config/nix" /nix/var/cache/ccache
   # full: the nix build sandbox (user namespaces); plain: none are allowed here
   cat > "$HOME/.config/nix/nix.conf" <<EOF

@@ -25,7 +25,7 @@
 스크립트가 sudo로 한 번 만든다.
 
 ```bash
-curl -fsSL https://releases.nixos.org/nix/nix-2.35.2/install | sh -s -- --no-daemon
+curl -fsSL https://nixos.org/nix/install | sh -s -- --no-daemon
 . ~/.nix-profile/etc/profile.d/nix.sh
 mkdir -p ~/.config/nix /nix/var/cache/ccache
 cat >> ~/.config/nix/nix.conf <<'EOF'
@@ -33,6 +33,10 @@ experimental-features = nix-command flakes
 extra-sandbox-paths = /nix/var/cache/ccache
 EOF
 ```
+
+설치 스크립트는 최신 안정판 nix를 설치한다. 이 레포는 nix 버전에 묶이지 않는다. `flake.lock`이 고정하는
+것은 nix 자체가 아니라 nixpkgs, 곧 빌드 도구들이다. 검증한 버전은 2.35.2이고, 나중에 올리려면
+`nix upgrade-nix`를 실행한다.
 
 `extra-sandbox-paths`는 `nix build`의 샌드박스가 ccache를 쓰게 한다. user namespace를 만들 수 없는
 환경(권한 없는 컨테이너 등)이면 `sandbox = false`도 한 줄 더 둔다. 사내망 머신이면

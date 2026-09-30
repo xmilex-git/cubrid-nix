@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The clean-room check (ADR 0001 D12): fresh containers of a bare Ubuntu with only the
 # nix installer's prerequisites, as an ordinary user. Two phases share /nix and the home:
-#   prepare  with network: nix 2.35.2, the dev shell, the sources, every build input
+#   prepare  with network: nix (the latest stable, or CLEANROOM_NIX_VERSION), the dev
+#            shell, the sources, every build input
 #   verify   --network=none: builds, a ccache rebuild, smoke, CTP (+ perf, gdb in full)
 # Modes:
 #   full   privileged container: nix build sandbox, parallel CTP shards, perf, gdb
@@ -28,7 +29,7 @@ pat=$(cat /proc/sys/kernel/core_pattern)
 case "$pat" in /*) args+=(-v "$base/cores:$(dirname "$pat")") ;; esac
 [ "$mode" = full ] && args+=(--privileged)
 # a LAN binary cache for the cold start (ADR 0002): CUBRID_NIX_CACHE_URL and its key
-for v in CUBRID_NIX_CACHE_URL CUBRID_NIX_CACHE_KEY; do
+for v in CUBRID_NIX_CACHE_URL CUBRID_NIX_CACHE_KEY CLEANROOM_NIX_VERSION; do
   [ -z "${!v:-}" ] || args+=(-e "$v=${!v}")
 done
 
