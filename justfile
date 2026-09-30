@@ -4,6 +4,7 @@
 #   just seal <worktree>                        record new sealed inputs (D7), needs network
 #   just smoke <install>                        server + csql + PL/CSQL in a run directory (D2)
 #   just ctp <sql|medium> <install> [args]     CTP in unshare shards (D8)
+#   just cache-push <dir> [key]                 fill the LAN binary cache directory (ADR 0002)
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
@@ -71,6 +72,38 @@ ctp suite install *args:
     fi
     "{{justfile_directory()}}/ctp/ctp_run.sh" --suite "{{suite}}" --build "{{install}}" \
       --testcases "$tc" --out "{{scratch}}/ctp/{{suite}}-$(date -u +%Y%m%dT%H%M%SZ)" {{args}}
+
+# Everything a new environment fetches or builds for `nix develop` and `just build`,
+# nixpkgs' own paths and the flake's inputs included, signed and zstd-compressed into a
+# nix file cache that `cache-server-image` serves. Paths already there are skipped.
+# Fill or update the LAN binary cache directory (ADR 0002)
+cache-push dir key="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    key="{{key}}"
+    key=${key:-$HOME/.config/cubrid-nix/cache-key.secret}
+    [ -r "$key" ] || { echo "no signing key at $key (ADR 0002 says how to make one)" >&2; exit 1; }
+    mkdir -p "{{dir}}"
+    dir=$(cd "{{dir}}" && pwd)
+    # substituters are asked in priority order, and cache.nixos.org's is 40
+    [ -e "$dir/nix-cache-info" ] || printf 'StoreDir: /nix/store\nWantMassQuery: 1\nPriority: 30\n' > "$dir/nix-cache-info"
+    to="file://$dir?compression=zstd&parallel-compression=true&secret-key=$key"
+    cd "{{justfile_directory()}}"
+    mapfile -t roots < <({{nix}} build --no-link --print-out-paths \
+      .#devShells.x86_64-linux.default.inputDerivation \
+      .#cubrid-optdebug.inputDerivation .#cubrid-release.inputDerivation)
+    # the shell `nix develop` starts, with every output
+    mapfile -t -O "${#roots[@]}" roots < <({{nix}} build --no-link --print-out-paths \
+      --inputs-from . 'nixpkgs#bashInteractive^*')
+    # A path written to after it was built would be served with a wrong hash.
+    {{nix}} store verify --no-trust --recursive "${roots[@]}" \
+      || { echo "modified store paths above: 'nix store repair <path>', then push again" >&2; exit 1; }
+    {{nix}} copy --to "$to" "${roots[@]}"
+    {{nix}} flake archive --to "$to"
+    # what a client gets: every path's content hash and this key's signature
+    pub=$({{nix}} key convert-secret-to-public < "$key")
+    {{nix}} store verify --store "file://$dir" --trusted-public-keys "$pub" --recursive "${roots[@]}"
+    echo "cache: $dir ($(du -sh "$dir" | cut -f1)), public key $pub"
 
 # Ports are the install's defaults: run it where they are private.
 # Server, csql and PL/CSQL on an install, in a fresh run directory

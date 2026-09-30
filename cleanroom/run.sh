@@ -27,12 +27,19 @@ args=(--rm --cgroupns=private --userns=keep-id --user "$(id -u):$(id -g)"
 pat=$(cat /proc/sys/kernel/core_pattern)
 case "$pat" in /*) args+=(-v "$base/cores:$(dirname "$pat")") ;; esac
 [ "$mode" = full ] && args+=(--privileged)
+# a LAN binary cache for the cold start (ADR 0002): CUBRID_NIX_CACHE_URL and its key
+for v in CUBRID_NIX_CACHE_URL CUBRID_NIX_CACHE_KEY; do
+  [ -z "${!v:-}" ] || args+=(-e "$v=${!v}")
+done
 
 t0=$(date +%s)
 podman run "${args[@]}" --network=host localhost/cubrid-nix-cleanroom:base bash /cleanroom/inside.sh prepare "$mode" \
   > "$base/prepare.log" 2>&1 || { echo "prepare failed: $base/prepare.log" >&2; exit 1; }
 t1=$(date +%s)
-podman run "${args[@]}" --network=none localhost/cubrid-nix-cleanroom:base bash /cleanroom/inside.sh verify "$mode" \
-  > "$base/verify.log" 2>&1 || echo "verify exited non-zero: $base/verify.log" >&2
+# CLEANROOM_PREPARE_ONLY=1 measures the cold start alone
+if [ "${CLEANROOM_PREPARE_ONLY:-0}" != 1 ]; then
+  podman run "${args[@]}" --network=none localhost/cubrid-nix-cleanroom:base bash /cleanroom/inside.sh verify "$mode" \
+    > "$base/verify.log" 2>&1 || echo "verify exited non-zero: $base/verify.log" >&2
+fi
 t2=$(date +%s)
 printf 'cold start (prepare): %ds\nverify: %ds\nresults: %s\n' $((t1 - t0)) $((t2 - t1)) "$base" | tee "$base/summary.txt"

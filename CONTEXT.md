@@ -36,6 +36,10 @@ _Avoid_: 로케일 데이터(CUBRID 프로세스의 `setlocale`이 읽는 glibc 
 네임스페이스를 만들 수 없는 환경에서 러너가 격리 없이 하나만 돌리는 샤드다. CTP teardown이 이 사용자의 모든 `cub_*`를 죽이므로 CUBRID 전용 환경을 전제로 하고, fsync는 eatmydata로 끈다.
 _Avoid_: 호스트 실행(격리 없는 CTP를 권하는 말로 들림), 폴백 모드
 
+**사내 바이너리 캐시 (LAN binary cache)**:
+새 환경이 `nix develop`과 빌드에 쓸 스토어 경로를 미리 서명해 둔 nix 파일 캐시다. 사내 서버가 이것을 내보낸다. 캐시가 닿는 머신은 도구를 빌드하지 않고 받기만 한다.
+_Avoid_: 공개 캐시(cache.nixos.org와 혼동), 빌드 캐시(ccache와 혼동)
+
 **클린룸 검증 (clean-room check)**:
 nix만 설치한 새 컨테이너에서 보장 범위가 통과함을 보이는 수용 시험이다. 권한 있는 컨테이너와 기본 권한 컨테이너에서 한 번씩 돈다.
 _Avoid_: 스모크(부분 확인과 혼동)

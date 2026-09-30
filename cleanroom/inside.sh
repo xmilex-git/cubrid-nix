@@ -30,6 +30,8 @@ if [ "$phase" = prepare ]; then
 experimental-features = nix-command flakes
 sandbox = $([ "$mode" = full ] && echo true || echo false)
 extra-sandbox-paths = /nix/var/cache/ccache
+${CUBRID_NIX_CACHE_URL:+extra-substituters = $CUBRID_NIX_CACHE_URL}
+${CUBRID_NIX_CACHE_KEY:+extra-trusted-public-keys = $CUBRID_NIX_CACHE_KEY}
 EOF
   . "$HOME/.nix-profile/etc/profile.d/nix.sh"
   nix --version

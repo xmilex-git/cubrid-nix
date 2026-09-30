@@ -35,7 +35,8 @@ EOF
 ```
 
 `extra-sandbox-paths`는 `nix build`의 샌드박스가 ccache를 쓰게 한다. user namespace를 만들 수 없는
-환경(권한 없는 컨테이너 등)이면 `sandbox = false`도 한 줄 더 둔다.
+환경(권한 없는 컨테이너 등)이면 `sandbox = false`도 한 줄 더 둔다. 사내망 머신이면
+[사내 바이너리 캐시](#사내-바이너리-캐시)의 두 줄도 넣는다.
 
 ### 2. 이 레포와 개발 셸
 
@@ -46,7 +47,7 @@ nix develop
 ```
 
 첫 `nix develop`은 12–18분 걸린다(64코어). 공개 캐시에 없는 CI 버전 도구(perl, git, bison, indent,
-astyle)를 소스에서 빌드하기 때문이다. 두 번째부터는 바로 뜬다. git, just, gdb, perf를 비롯해 아래
+astyle)를 소스에서 빌드하기 때문이다. 사내 캐시를 쓰면 20초 남짓이다. 두 번째부터는 바로 뜬다. git, just, gdb, perf를 비롯해 아래
 단계에 필요한 도구는 모두 이 셸에 있다.
 
 ### 3. CUBRID 소스
@@ -178,6 +179,33 @@ just seal ~/cubrid
 
 3rdparty 목록은 엔진의 `3rdparty/CMakeLists.txt`에서 읽으므로 따로 할 일이 없다.
 
+## 사내 바이너리 캐시
+
+사내망에는 새 환경이 받거나 빌드할 것을 모두 미리 서명해 둔 nix 캐시가 있다
+([ADR 0002](docs/adr/0002-lan-binary-cache.md)). 1단계의 `nix.conf`에 아래 두 줄을 더하면, 첫
+`nix develop`이 도구를 빌드하지 않고 이 캐시에서 받는다.
+
+```
+extra-substituters = http://<캐시 주소>
+extra-trusted-public-keys = cubrid-nix-cache-1:9tHaV41AhMl1GxTpdkaMjzH+V3/FiXx2F4hto1pcd+U=
+```
+
+- 캐시에 닿지 않는 머신에는 이 줄을 넣지 않는다. nix가 연결을 기다리느라 느려진다.
+- HTTP 프록시를 쓰는 환경이면 캐시 주소를 `no_proxy`에도 넣는다.
+- 클린룸 콜드 스타트는 캐시 없이 12–18분이었고, 캐시를 쓰니 270초였다.
+  - 그중 `nix develop` 단계는 10–15분에서 23초가 됐다.
+  - 나머지는 nix 설치와 엔진·테스트케이스 clone이다.
+
+캐시를 채우고 내보내는 쪽은 이렇게 한다.
+
+```bash
+just cache-push <캐시 디렉터리>    # flake.lock이나 nix/가 바뀔 때마다. 이미 있는 경로는 건너뛴다
+nix build .#cache-server-image     # nginx 서버 이미지. podman load로 올린다
+```
+
+- 서버 컨테이너는 캐시 디렉터리를 `/cache`에 읽기 전용으로 마운트하고 80번 포트로 내보낸다.
+- 서명 키를 만드는 법과, 잃었을 때 할 일은 ADR 0002에 있다.
+
 ## 알려진 한계
 
 - user namespace를 만들 수 없는 환경에서는 세 가지가 달라진다.
@@ -186,7 +214,7 @@ just seal ~/cubrid
   - `just shell-build`는 호스트의 `/usr/include/malloc.h`가 CI의 것(glibc 2.28)과 같을 때만 된다. 엔진
     소스 한 곳이 이 파일을 절대 경로로 include하기 때문이다. 다르면 `just build`를 쓴다.
   - CTP는 샤드 하나가 격리 없이 돈다.
-- 첫 `nix develop`은 12–18분이다. CI 버전 도구를 받아 올 바이너리 캐시가 없어서 소스에서 빌드한다.
+- 사내 캐시가 닿지 않는 머신에서 첫 `nix develop`은 12–18분이다. CI 버전 도구를 소스에서 빌드한다.
 - nix는 URL마다 한 번씩만 받기를 시도한다. 프록시나 미러의 일시적 오류로 실패하면 `nix develop`을 다시
   실행한다. 이미 받은 것은 다시 받지 않는다.
 - `~/.cache/cubrid-nix/locale`은 저절로 비워지지 않는다. 설치본 하나에 19MB쯤이다.

@@ -80,12 +80,54 @@
       # loads it only from a safe path, and /nix/store's is not one by default.
       # `nix build` compiles in /build/source: with CUBRID_NIX_SRC set to the source it
       # was exported to (just build prints it), gdb shows the source text too.
+      # gdb's Python writes .pyc files next to its modules. As root in a user namespace
+      # over a single-user install, that is inside gdb's own store path, which it
+      # modifies (and a binary cache would then serve it with a wrong hash).
       gdb = pkgs.writeShellScriptBin "gdb" ''
         sub=()
         [ -z "''${CUBRID_NIX_SRC:-}" ] || sub=(-iex "set substitute-path /build/source $CUBRID_NIX_SRC")
+        export PYTHONDONTWRITEBYTECODE=1
         exec ${pkgs.gdb}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' \
           -iex 'add-auto-load-safe-path ${snapshot}/usr/lib64' "''${sub[@]}" "$@"
       '';
+
+      # The LAN binary cache's server (ADR 0002): nginx serves the cache directory that
+      # `just cache-push` fills, mounted read-only at /cache. A docker archive built from
+      # nixpkgs, so `podman load` needs no registry.
+      cacheServerConf = pkgs.writeText "nginx.conf" ''
+        user nobody nobody;
+        daemon off;
+        worker_processes 4;
+        error_log /dev/stderr warn;
+        pid /dev/null;
+        events {
+          worker_connections 1024;
+        }
+        http {
+          access_log off;
+          sendfile on;
+          tcp_nopush on;
+          default_type application/octet-stream;
+          server {
+            listen 80;
+            root /cache;
+          }
+        }
+      '';
+      cacheServerImage = pkgs.dockerTools.buildLayeredImage {
+        name = "cubrid-nix-cache";
+        tag = "latest";
+        contents = [ pkgs.dockerTools.fakeNss pkgs.nginx ];
+        # nginx opens its compiled-in temp and log directories even when unused
+        extraCommands = ''
+          mkdir -p -m 1777 tmp
+          mkdir -p tmp/nginx_client_body var/log/nginx cache
+        '';
+        config = {
+          Cmd = [ "nginx" "-c" "${cacheServerConf}" ];
+          ExposedPorts."80/tcp" = { };
+        };
+      };
     in
     {
       lib.${system} = {
@@ -141,6 +183,7 @@
           inherit eatmydata;
           cubrid-optdebug = cubridFor { src = cubrid-src; mode = "optdebug"; };
           cubrid-release = cubridFor { src = cubrid-src; mode = "release"; };
+          cache-server-image = cacheServerImage;
           default = toolchain;
         };
     };
