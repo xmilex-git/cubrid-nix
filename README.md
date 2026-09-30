@@ -26,6 +26,27 @@
 | CTP 실행 도구 | nixpkgs 24.11 | 문제가 생기면 CI 테스트 이미지 버전으로 교체 |
 | 진단·캐시 | nixpkgs 24.11 | gdb 15.2, perf 6.6, ccache 4.10.2 |
 
+## 새 환경 준비
+
+배포판에서 받을 것은 nix 설치 스크립트가 쓰는 curl, xz, ca-certificates뿐이다.
+
+```bash
+curl -fsSL https://releases.nixos.org/nix/nix-2.35.2/install | sh -s -- --no-daemon
+. ~/.nix-profile/etc/profile.d/nix.sh
+mkdir -p ~/.config/nix /nix/var/cache/ccache
+cat >> ~/.config/nix/nix.conf <<'EOF'
+experimental-features = nix-command flakes
+extra-sandbox-paths = /nix/var/cache/ccache
+EOF
+nix run nixpkgs#git -- clone https://github.com/xmilex-git/cubrid-nix && cd cubrid-nix
+nix develop            # 첫 실행은 12–18분: 공개 캐시에 없는 CI 버전 도구를 빌드한다
+git clone --shallow-since=2019-12-01 https://github.com/CUBRID/cubrid ~/cubrid
+git -C ~/cubrid submodule update --init
+```
+
+`extra-sandbox-paths`는 `nix build`의 샌드박스가 ccache를 쓰게 한다. user namespace를 만들 수 없는
+환경이면 `sandbox = false`도 둔다(보장 문구 참고).
+
 ## 사용법
 
 ```bash
