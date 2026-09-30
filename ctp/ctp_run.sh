@@ -123,7 +123,9 @@ OPTIONS
   --no-webconsole        skip the merged report under <out>/webconsole
   --merge-only <dir>     merge a finished run into <dir>/webconsole and exit
   --label <text>         label for the merged run
-  --locale-dir <dir>     prebuilt libcubrid_all_locales.so to inject
+  --locale-dir <dir>     prebuilt libcubrid_all_locales.so to inject (default: the
+                         install's own, else one built by the install's first run
+                         and kept in ~/.cache/cubrid-nix/locale)
   --dry-run              plan + validate the split, launch nothing
   -h, --help             this text
 
@@ -132,6 +134,7 @@ OUTPUT
   <out>/plan.tsv, assignment.tsv, units.tsv, plan_pin.tsv
   <out>/shard_N/{console.log,console.ts.log,exclusions.txt,assigned_cases.txt,reports/,cores/}
   <out>/failed.list          failing cases, in the shape --only takes
+  <out>/locale/make_locale.log   the install's locale build, on the run that built it
 EOF
 }
 
@@ -520,7 +523,7 @@ USE_EATMYDATA=0
 NS_MODE=1   # 0: this environment cannot make namespaces; one shard runs directly
 host_preflight() {
   local t tool
-  for tool in unshare nsenter ip readelf; do
+  for tool in unshare nsenter ip readelf flock; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH; run inside \`nix develop\` (or \`just ctp\`)."
   done
   [ -d /mnt ] || die "/mnt does not exist: each shard stages its directory there before it builds the CI layout on /home."
@@ -1458,11 +1461,11 @@ build_shard_workdir() {
   # locale libraries stay in the shard; the install's files are shared through links.
   "$REPO_DIR/scripts/rundir.sh" "$ARG_BUILD" "$d/CUBRID" >/dev/null
   if true; then
-    # Locale speedup (D6): CTP keeps need_make_locale=yes, but make_locale is the
-    # single slowest startup step (~60-90s of gcc, repeated in EVERY shard). Ship a
-    # prebuilt libcubrid_all_locales.so + an early-exit make_locale.sh so CTP's
+    # Locale speedup: CTP keeps need_make_locale=yes, but make_locale is the
+    # single slowest startup step (about 43 s of gcc, in EVERY shard). Ship
+    # a prebuilt libcubrid_all_locales.so + an early-exit make_locale.sh so CTP's
     # make_locale finds the .so already present and returns immediately instead of
-    # recompiling. The locale is thus compiled at most ONCE (offline), not per shard.
+    # recompiling. The library is compiled once per install (resolve_locale).
     if [ -n "$LOCALE_SO" ]; then
       rm -f "$d/CUBRID/lib/libcubrid_all_locales.so" "$d/CUBRID/bin/make_locale.sh"
       cp -f "$LOCALE_SO" "$d/CUBRID/lib/libcubrid_all_locales.so"
@@ -1619,6 +1622,7 @@ write_shard_env() {
   {
     printf 'DIRECT=%q\n' "$(( 1 - NS_MODE ))"
     printf 'SUITE=%q\n' "$ARG_SUITE"
+    printf 'INSTALL=%q\n' "$(readlink -f "$ARG_BUILD")"
     printf 'TCREPO=%q\n' "$SUITE_TCREPO"
     printf 'SUBPATH=%q\n' "$SUITE_SUBPATH"
     printf 'CORE_DIR=%q\n' "$([ "$CORE_MODE" = path ] && echo "$CORE_DIR")"
@@ -2153,16 +2157,81 @@ merge_results() {
 }
 
 #####################################################################
-# Resolve the prebuilt locale lib + early-exit make_locale.sh to inject per shard
-# (D6). Source priority: (1) --locale-dir, (2) a libcubrid_all_locales.so already
-# in the build tree. The early-exit make_locale.sh is taken from --locale-dir if
-# present, else the skill-bundled copy under locale/. The 18MB .so itself is NOT
-# bundled in the skill; without it shards compile the locale themselves (slow).
+# Resolve the prebuilt locale lib + early-exit make_locale.sh to inject per shard.
+# Source priority: (1) --locale-dir, (2) a libcubrid_all_locales.so already
+# in the build tree, (3) the per-install cache under $LOCALE_CACHE, built by the
+# first run of an install. The early-exit make_locale.sh is taken from --locale-dir
+# if present, else the copy under locale/.
 #####################################################################
 LOCALE_SO=""
 LOCALE_SCRIPT=""
+LOCALE_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/cubrid-nix/locale"
+
+# What the library is made from: genlocale's code (libcubridsa.so), the locale data
+# and build script, the locale list CTP switches to, and the compiler on this PATH.
+# The build mode CTP picks from cubrid_rel comes with libcubridsa.so, and any engine
+# rebuild changes that file, so a new build gets its own library.
+locale_key() {
+  local b="$1" f
+  for f in lib/libcubridsa.so conf/cubrid_locales.all.txt locales/loclib/build_locale.sh; do
+    [ -r "$b/$f" ] || { err "locale: the install has no $f: $b"; return 1; }
+  done
+  command -v gcc >/dev/null 2>&1 || { err "locale: gcc is not on PATH; run inside \`nix develop\`."; return 1; }
+  {
+    sha256sum < "$b/lib/libcubridsa.so"
+    sha256sum < "$b/conf/cubrid_locales.all.txt"
+    (cd "$b/locales" && find -L . -type f | LC_ALL=C sort | xargs -r -d '\n' sha256sum)
+    readlink -f "$(command -v gcc)"
+  } | sha256sum | cut -c1-32
+}
+
+# CTP's make_locale (sql/bin/run.sh, common/script/util_compat_test.sh), run once on a
+# run directory of the install: every locale in cubrid_locales.txt, make_locale.sh
+# -t 64bit, and -m debug when cubrid_rel names a debug build, with a shard's toolchain
+# and locale variables. gcc's temporary files go to the run directory, not /tmp.
+build_locale_lib() {
+  local dest="$1" w="$OUT/locale" so
+  info "locale: building libcubrid_all_locales.so for this install (CTP's make_locale; once per install) ..."
+  rm -rf "${w:?}/CUBRID" "${w:?}/tmp"
+  mkdir -p "$w/tmp"
+  "$REPO_DIR/scripts/rundir.sh" "$ARG_BUILD" "$w/CUBRID" >/dev/null \
+    || die "locale: cannot make a run directory under $w"
+  # shellcheck disable=SC2016
+  "$BASH" -c 'exec -c "$0" "$@"' "$BASH" -c '
+    set -euo pipefail
+    export CUBRID=$1 CUBRID_DATABASES=$1/databases CUBRID_TMP=$1/var TMPDIR=$2 HOME=${1%/*}
+    export PATH=$1/bin:$3 LOCALE_ARCHIVE=$4 TZDIR=$5
+    export TZ=Asia/Seoul LANG=en_US.UTF-8 LC_ALL=en_US
+    cp -f "$CUBRID/conf/cubrid_locales.all.txt" "$CUBRID/conf/cubrid_locales.txt"
+    rel=$(cubrid_rel 2>&1 | tr -s "\n" " " || true)
+    echo "cubrid_rel: $rel"
+    mode=()
+    case "$rel" in *debug*) mode=(-m debug) ;; esac
+    cd "$CUBRID/bin"
+    sh make_locale.sh -t 64bit "${mode[@]}"
+  ' _ "$w/CUBRID" "$w/tmp" "$PATH" "${LOCALE_ARCHIVE:-}" "${TZDIR:-}" > "$w/make_locale.log" 2>&1 \
+    || die "locale: make_locale failed; see $w/make_locale.log"
+  so="$w/CUBRID/lib/libcubrid_all_locales.so"
+  [ -f "$so" ] && [ ! -L "$so" ] || die "locale: make_locale left no $so; see $w/make_locale.log"
+  rm -rf "${dest:?}.partial"
+  mkdir -p "$dest.partial"
+  cp -f "$so" "$dest.partial/libcubrid_all_locales.so"
+  {
+    printf 'install\t%s\n' "$(readlink -f "$ARG_BUILD")"
+    printf 'cubrid_rel\t%s\n' "$(sed -n 's/^cubrid_rel: *//p' "$w/make_locale.log" | head -1)"
+    printf 'build_mode\t%s\n' "$(sed -n 's/^ *BUILD_MODE *= *//p' "$w/make_locale.log" | head -1)"
+    printf 'gcc\t%s\n' "$(readlink -f "$(command -v gcc)")"
+    printf 'built\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'run\t%s\n' "$OUT"
+  } > "$dest.partial/source.tsv"
+  rm -rf "${dest:?}"
+  mv -T "$dest.partial" "$dest"
+  # the log stays with this run; the run directory's copies go
+  rm -rf "${w:?}/CUBRID" "${w:?}/tmp"
+}
+
 resolve_locale() {
-  local bundled="$SELF_DIR/locale/make_locale.sh"
+  local bundled="$SELF_DIR/locale/make_locale.sh" key dir src lock
   if [ -n "$ARG_LOCALE_DIR" ]; then
     [ -d "$ARG_LOCALE_DIR" ] || die "--locale-dir does not exist: $ARG_LOCALE_DIR"
     [ -r "$ARG_LOCALE_DIR/libcubrid_all_locales.so" ] \
@@ -2173,16 +2242,34 @@ resolve_locale() {
     else
       LOCALE_SCRIPT="$bundled"
     fi
+    src="--locale-dir"
   elif [ -r "$ARG_BUILD/lib/libcubrid_all_locales.so" ]; then
     LOCALE_SO="$ARG_BUILD/lib/libcubrid_all_locales.so"
     LOCALE_SCRIPT="$bundled"
-  fi
-  if [ -n "$LOCALE_SO" ]; then
-    [ -r "$LOCALE_SCRIPT" ] || die "early-exit make_locale.sh missing: $LOCALE_SCRIPT"
-    info "locale: injecting prebuilt $(basename "$LOCALE_SO") + early-exit make_locale.sh per shard (skips per-shard compile)."
+    src="the install"
   else
-    info "locale: no prebuilt locale lib; shards will run make_locale (slow). Pass --locale-dir <dir with libcubrid_all_locales.so> to skip it."
+    key="$(locale_key "$ARG_BUILD")" || die "locale: cannot fingerprint $ARG_BUILD"
+    dir="$LOCALE_CACHE/$key"
+    mkdir -p "$LOCALE_CACHE" || die "locale: cannot create $LOCALE_CACHE"
+    # one builder at a time: a run of the same install waits and then reuses the library
+    exec {lock}> "$LOCALE_CACHE/.lock" || die "locale: cannot open $LOCALE_CACHE/.lock"
+    if ! flock -n "$lock"; then
+      info "locale: another run is building a locale library; waiting for it ..."
+      flock "$lock"
+    fi
+    if [ -r "$dir/libcubrid_all_locales.so" ]; then
+      src="cache, built $(awk -F'\t' '$1=="built" {print $2}' "$dir/source.tsv" 2>/dev/null)"
+    else
+      build_locale_lib "$dir"
+      src="cache, built by this run"
+    fi
+    exec {lock}>&-
+    LOCALE_SO="$dir/libcubrid_all_locales.so"
+    LOCALE_SCRIPT="$bundled"
   fi
+  [ -r "$LOCALE_SCRIPT" ] || die "early-exit make_locale.sh missing: $LOCALE_SCRIPT"
+  info "locale: injecting $LOCALE_SO ($src) + early-exit make_locale.sh into every shard."
+  printf 'locale\t%s (%s)\n' "$LOCALE_SO" "$src" >> "$OUT/provenance.tsv"
 }
 
 #####################################################################
@@ -2210,6 +2297,8 @@ prune_shard_copies() {
     for sub in CUBRID CTP testcases CUBRID_DB; do
       rm -rf "$d/$sub" 2>/dev/null || :
     done
+    # the empty mount point of an install under /home (shard_entry.sh); rmdir, never rm -r
+    rmdir "$d/install" 2>/dev/null || :
     # The volatile overlay's workdir keeps a mode-000 work/ owned by the
     # namespace's root; only a user namespace can remove it.
     if [ -e "$d/volatile" ]; then
@@ -2365,6 +2454,7 @@ main() {
   mark_phase planned
   setup_core_capture
   resolve_locale
+  mark_phase locale_ready
   declare -ga SHARD_NAMES SHARD_RC SHARD_PIDS
   local i
   # In parallel: each shard's copies are its own files, and 16 in a row took 26s.

@@ -28,6 +28,10 @@ _Avoid_: 설치본 사본(전체 복사로 오해)
 러너가 스위트를 시간 균형으로 나눈 실행 단위로, 격리 단위(`unshare` 네임스페이스) 하나와 1:1이다. 부분 실행은 샤드 1개짜리 실행이다.
 _Avoid_: 컨테이너(workspace 러너의 격리 단위), 노드, 버킷
 
+**로케일 라이브러리 (locale library)**:
+`cubrid_locales.txt`에 적힌 로케일을 `make_locale.sh`가 LDML에서 컴파일한 공유 라이브러리(`libcubrid_all_locales.so`)다. 서버는 그 로케일과 콜레이션을 이 라이브러리로 쓴다. CTP는 DB를 만들기 전에 이것을 만든다. 이 레포에서는 설치본마다 한 번 만들어, 모든 샤드와 이후 실행이 나눠 쓴다.
+_Avoid_: 로케일 데이터(CUBRID 프로세스의 `setlocale`이 읽는 glibc 로케일 파일과 혼동), 로케일 빌드(엔진 빌드와 혼동)
+
 **직접 샤드 (direct shard)**:
 네임스페이스를 만들 수 없는 환경에서 러너가 격리 없이 하나만 돌리는 샤드다. CTP teardown이 이 사용자의 모든 `cub_*`를 죽이므로 CUBRID 전용 환경을 전제로 하고, fsync는 eatmydata로 끈다.
 _Avoid_: 호스트 실행(격리 없는 CTP를 권하는 말로 들림), 폴백 모드

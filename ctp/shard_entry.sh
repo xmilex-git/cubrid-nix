@@ -68,9 +68,21 @@ else
     mount --bind "$d/cores/" "$CORE_DIR" || die "core dir $CORE_DIR"
   fi
 
+  # The run directory names the install by its absolute path (its links and wrappers).
+  # The mounts below cover /mnt, /tmp and /home, so an install under one of them (a
+  # `just shell-build` prefix in the home directory) rides along in the shard dir and
+  # is bound back at its own path once the layout is up.
+  case "$INSTALL" in
+    /home/*|/mnt/*|/tmp/*) install_covered=1 ;;
+    *) install_covered=0 ;;
+  esac
+  if [ "$install_covered" = 1 ]; then
+    mkdir -p "$d/install" && mount --bind "$INSTALL" "$d/install" || die "stage the install $INSTALL"
+  fi
+
   # The CI container's layout. The shard dir is staged on /mnt first: the tmpfs on /home
-  # would hide it when it lives under /home.
-  mount --bind "$d" /mnt || die "stage the shard on /mnt"
+  # would hide it when it lives under /home. --rbind carries the staged install along.
+  mount --rbind "$d" /mnt || die "stage the shard on /mnt"
   d=/mnt   # $d may be under /home, which the tmpfs below hides
   # a private /tmp on the shard's disk, as the CI container has its own
   mkdir -p /mnt/tmp && mount --bind /mnt/tmp /tmp || die "private /tmp"
@@ -81,6 +93,9 @@ else
   mount --bind /mnt/testcases "/home/$TCREPO"
   mount --bind /mnt/CUBRID_DB /home/CUBRID_DB
   mount --bind /mnt/reports /home/reports
+  if [ "$install_covered" = 1 ]; then
+    mkdir -p "$INSTALL" && mount --bind /mnt/install "$INSTALL" || die "bind the install back at $INSTALL"
+  fi
   # sql/medium create basic/mdb under $CUBRID/databases (run.sh: cubrid_root_dir=$CUBRID).
   # With the volatile option every fsync there returns at once; the database is thrown
   # away with the shard (workspace ADR 0017 D7).
