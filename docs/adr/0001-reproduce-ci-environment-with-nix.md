@@ -158,6 +158,9 @@ workspace 호스트의 기존 흐름(`just build`, podman 기반 `just ctp`)은 
   허용돼야 한다(기본 seccomp에 그 호출 하나를 더한 프로필이면 된다). `perf_event_paranoid=2`에서는
   사용자 공간 이벤트만 잰다.
 - **유지하는 규칙:** 라이브 서버 gdb attach 금지. 코어 판독만 한다.
+- **시스템 라이브러리 debuginfo는 넣지 않는다 (사용자 결정 2026-09-30).** Rocky 8.10의 glibc·libstdc++
+  debuginfo RPM(합 7 MB)을 넣으면 glibc 내부 함수의 줄 번호까지 보이지만, 필요 없다고 정했다. CI처럼
+  glibc 프레임은 함수 이름만 보인다.
 
 ## D11 — 보장 문구
 
