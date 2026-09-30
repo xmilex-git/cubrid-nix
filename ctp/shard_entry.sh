@@ -101,11 +101,12 @@ export CUBRID_DATABASES=$top/CUBRID_DB TEST_REPORT=$top/reports
 # ports in every shard): a second master unlinks the first one's socket. Keep it in the
 # shard (the direct layout has its own CUBRID_TMP above).
 [ "$DIRECT" = 1 ] || export CUBRID_TMP=$CUBRID/var/CUBRID_SOCK
+# LOCALE_ARCHIVE first: bash resolves LC_ALL=en_US itself, from this archive
+export JAVA_HOME TZDIR LOCALE_ARCHIVE
 export TZ=Asia/Seoul LANG=en_US.UTF-8 LC_ALL=en_US CTP_SKIP_UPDATE=1 CTP_BRANCH_NAME=develop
 export USER LOGNAME
 USER=$(id -un); LOGNAME=$USER
 export PATH="$CUBRID/bin:$CTP_HOME/bin:$CTP_HOME/common/script:$TOOLS_PATH"
-export JAVA_HOME TZDIR LOCALE_ARCHIVE
 if [ -n "${EXTRA_ENV:-}" ]; then
   while IFS= read -r kv; do [ -z "$kv" ] || export "${kv?}"; done <<< "$EXTRA_ENV"
 fi
@@ -144,7 +145,9 @@ step "cubrid_rel: $(cubrid_rel 2>&1 | tr -s '\n' ' ')"
 run_stamp=$d/.run_stamp
 : > "$run_stamp"
 ctp_ret=0
-( cd "$top" && "$CTP_HOME/bin/ctp.sh" "$CTP_CMD" -c "$conf" ) || ctp_ret=$?
+# ctp.sh says #!/bin/sh but uses ${PIPESTATUS[0]}: where /bin/sh is dash (Debian, Ubuntu) it
+# dies with "Bad substitution" and exit 2 once the run is over, so bash runs it.
+( cd "$top" && "$BASH" "$CTP_HOME/bin/ctp.sh" "$CTP_CMD" -c "$conf" ) || ctp_ret=$?
 
 # collect_xml
 n=0

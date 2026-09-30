@@ -10,9 +10,10 @@
       url = "git+https://github.com/CUBRID/cubrid.git?ref=develop&shallow=1&submodules=1";
       flake = false;
     };
-    # CTP, pinned (ADR 0001 D8): the CI image takes testtools' develop at every run.
+    # CTP, pinned (ADR 0001 D8): the CI image takes testtools' develop at every run. A GitHub
+    # tarball, so that entering the dev shell needs no git on a bare system.
     cubrid-testtools = {
-      url = "git+https://github.com/CUBRID/cubrid-testtools.git?ref=develop&shallow=1";
+      url = "github:CUBRID/cubrid-testtools/develop";
       flake = false;
     };
   };
@@ -51,13 +52,17 @@
         in
         (sealedFor src).seed;
 
-      # fsync without a volatile overlay (ADR 0001 D8): built against the snapshot's
-      # glibc 2.28 so that it loads into CUBRID's processes and nix programs alike.
+      # fsync without a volatile overlay (ADR 0001 D8): compiled by the snapshot's toolchain
+      # (glibc 2.28 symbol versions, which every newer glibc also provides) and left without
+      # a RUNPATH: with the snapshot's libdl.so.2 named there, a nix program on glibc 2.40
+      # loading it dies with `undefined symbol: _dl_vsym`. Each process, CUBRID's on 2.28,
+      # nix's on 2.40 or the distribution's, then takes libdl and libc of its own glibc.
       eatmydata = pkgs.stdenvNoCC.mkDerivation {
         pname = "libeatmydata-ci";
         inherit (pkgs.libeatmydata) version src;
-        nativeBuildInputs = [ toolchain pkgs.autoreconfHook ];
+        nativeBuildInputs = [ toolchain pkgs.autoreconfHook pkgs.patchelf ];
         preConfigure = "export CC=gcc";
+        postFixup = "patchelf --remove-rpath $out/lib/libeatmydata.so";
       };
 
       # Locales for CTP's own tools (nixpkgs' glibc): the shard's LANG and LC_ALL.
@@ -71,13 +76,15 @@
         	addr2line-timeout = 60000
       '';
 
-      # gdb reads CUBRID's threads through the libthread_db of the snapshot's glibc 2.28.
+      # gdb reads CUBRID's threads through the libthread_db of the snapshot's glibc 2.28; gdb
+      # loads it only from a safe path, and /nix/store's is not one by default.
       # `nix build` compiles in /build/source: with CUBRID_NIX_SRC set to the source it
       # was exported to (just build prints it), gdb shows the source text too.
       gdb = pkgs.writeShellScriptBin "gdb" ''
         sub=()
         [ -z "''${CUBRID_NIX_SRC:-}" ] || sub=(-iex "set substitute-path /build/source $CUBRID_NIX_SRC")
-        exec ${pkgs.gdb}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' "''${sub[@]}" "$@"
+        exec ${pkgs.gdb}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' \
+          -iex 'add-auto-load-safe-path ${snapshot}/usr/lib64' "''${sub[@]}" "$@"
       '';
     in
     {

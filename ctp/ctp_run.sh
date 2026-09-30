@@ -488,7 +488,7 @@ write_provenance() {
   {
     printf 'suite\t%s\n' "$ARG_SUITE"
     printf 'install\t%s\n' "${ARG_BUILD:-}"
-    printf 'runner\tunshare shards (cubrid-nix %s)\n' "$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)$(git -C "$REPO_DIR" diff --quiet HEAD 2>/dev/null || echo +dirty)"
+    printf 'runner\t%s (cubrid-nix %s)\n' "$([ "$NS_MODE" -eq 1 ] && echo "unshare shards" || echo "one direct shard")" "$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)$(git -C "$REPO_DIR" diff --quiet HEAD 2>/dev/null || echo +dirty)"
     printf 'nixpkgs\t%s\n' "${CUBRID_NIX_NIXPKGS_REV:-unknown}"
     printf 'snapshot\t%s\n' "$(snapshot_of "${ARG_BUILD:-/nonexistent}" || echo unknown)"
     printf 'fsync\t%s\n' "$([ -n "$VOLATILE_TARGETS" ] && echo "volatile overlay" || { [ "$USE_EATMYDATA" -eq 1 ] && echo eatmydata || echo "fsync on"; })"
@@ -1649,7 +1649,7 @@ launch_shard() {
     mkdir -p "$d/cores"
   fi
   write_shard_env "$d"
-  info "shard $i: launching (unshare -Urmipnf, ctp.sh ${SUITE_CAT}) ..."
+  info "shard $i: launching ($([ "$NS_MODE" -eq 1 ] && echo "unshare -Urmipnf" || echo "direct, no namespaces"), ctp.sh ${SUITE_CAT}) ..."
   if [ "$NS_MODE" -eq 1 ]; then
     # --kill-child: when unshare dies, the shard's PID 1 dies, and with it every process
     # of the shard's PID namespace.

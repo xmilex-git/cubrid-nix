@@ -25,17 +25,16 @@
       "locked": {
         "lastModified": 1790647833,
         "narHash": "sha256-/7WHSkLWr0WXtu+iP8yxGYyQjOYSlDsbBDmASONjiiE=",
-        "ref": "develop",
+        "owner": "CUBRID",
+        "repo": "cubrid-testtools",
         "rev": "4d0043a7b149b3fc5d3ccb2e08c98cf8d77b34fb",
-        "shallow": true,
-        "type": "git",
-        "url": "https://github.com/CUBRID/cubrid-testtools.git"
+        "type": "github"
       },
       "original": {
+        "owner": "CUBRID",
         "ref": "develop",
-        "shallow": true,
-        "type": "git",
-        "url": "https://github.com/CUBRID/cubrid-testtools.git"
+        "repo": "cubrid-testtools",
+        "type": "github"
       }
     },
     "nixpkgs": {

@@ -32,16 +32,23 @@ pid=$(pgrep -x cub_server)
   done ) > "$R/diag-load.log" 2>&1 &
 perf record -e cycles:u --call-graph fp -o "$R/perf.data" -p "$pid" -- sleep 8 > "$R/perf-record.log" 2>&1
 wait
-perf report -i "$R/perf.data" --stdio --no-children --sort dso,symbol 2>/dev/null | head -60 > "$R/perf-top.txt"
+# reports go to files first: `| head` closes the pipe, and under pipefail set -e would end the script
+perf report -i "$R/perf.data" --stdio --no-children -g none --sort dso,symbol > "$R/perf-flat.txt" 2>/dev/null
+head -60 "$R/perf-flat.txt" > "$R/perf-top.txt"
+perf report -i "$R/perf.data" --stdio --no-children --sort dso,symbol > "$R/perf-report.txt" 2>/dev/null   # with call chains
 
-# gdb: a core the kernel writes where core_pattern points
+# gdb: a core the kernel writes where core_pattern points. The server's fatal signal
+# handler ignores a SIGSEGV that came from kill(2) (si_code <= 0, server.c crash_handler);
+# in an optdebug build (asserts on) its SIGABRT handler ends in abort(), which dumps core.
 pat=$(cat /proc/sys/kernel/core_pattern)
-kill -SEGV "$pid"
-for i in $(seq 1 60); do
-  core=$(ls -t "$(dirname "$pat")"/core.cub_server.* 2>/dev/null | head -1 || true)
-  [ -n "$core" ] && [ -s "$core" ] && break
-  sleep 2
+kill -ABRT "$pid"
+# the kernel keeps the process until the core is written: wait until it is gone (or a zombie)
+for i in $(seq 1 120); do
+  st=$(awk '/^State:/ { print $2 }' "/proc/$pid/status" 2>/dev/null || true)
+  case "$st" in ''|Z) break ;; esac
+  sleep 1
 done
+core=$(ls -t "$(dirname "$pat")"/core.cub_server.* 2>/dev/null | head -1 || true)
 if [ -n "${core:-}" ]; then
   echo "$core" > "$R/core-path.txt"
   gdb -batch -ex 'info threads' -ex 'thread apply all bt 8' "$inst/bin/cub_server" "$core" > "$R/gdb-core-bt.txt" 2>&1 || true

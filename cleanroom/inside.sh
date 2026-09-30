@@ -14,6 +14,8 @@ R=$HOME/results
 mkdir -p "$R"
 mark() { printf '%s\t%s\t%s\n' "$phase" "$1" "$(date +%s)" >> "$R/timing.tsv"; echo "=== [$phase] $1 $(date -u +%FT%TZ)"; }
 nx() { nix --extra-experimental-features 'nix-command flakes' "$@"; }
+# downloads go through whatever proxy the host has; a transient 5xx fails one fetch
+retry() { local n; for n in 1 2 3; do "$@" && return 0; echo "retry $n: $*" >&2; sleep 10; done; return 1; }
 dev() { nx develop "$HOME/cubrid-nix" -c "$@"; }
 ENGINE_REV=35f528e89f9918ec0ac1a272c0da4fec67c51078
 SRC=$HOME/cubrid-nix/.scratch/src/cubrid
@@ -34,8 +36,10 @@ EOF
   mark nix_installed
 
   git_bin=$(nx build --no-link --print-out-paths /src/cubrid-nix#tool-git)/bin/git
+  # nix runs the `git` on PATH to fetch the flake's git+https inputs (CTP): a bare Ubuntu has none
+  export PATH="${git_bin%/git}:$PATH"
   "$git_bin" clone -q /src/cubrid-nix "$HOME/cubrid-nix"
-  dev true
+  retry dev true
   mark devshell_ready
 
   # build.sh numbers the version by the commits since 2019-12-12: that much history suffices
@@ -48,7 +52,7 @@ EOF
   mark testcases_cloned
 
   dev "$HOME/cubrid-nix/scripts/export-source.sh" "$HOME/cubrid" "$SRC"
-  (cd "$HOME/cubrid-nix" && nx build --no-link "${override[@]}" \
+  (cd "$HOME/cubrid-nix" && retry nx build --no-link "${override[@]}" \
      .#cubrid-optdebug.inputDerivation .#cubrid-release.inputDerivation)
   mark inputs_realized
   du -sh /nix/store | tee "$R/store-size-prepared.txt"
@@ -68,11 +72,12 @@ done
 readlink -f .scratch/install/cubrid-optdebug .scratch/install/cubrid-release | tee "$R/installs.txt"
 
 # a one-line change in the exported source: the sandbox rebuilds, ccache serves the rest
-dev ccache -s > "$R/ccache-before.txt" 2>&1 || true
+# the sandbox builds keep their cache in /nix/var/cache/ccache, not the dev shell's default
+CCACHE_DIR=/nix/var/cache/ccache dev ccache -s > "$R/ccache-before.txt" 2>&1 || true
 echo "/* clean-room rebuild */" >> "$SRC/src/query/query_executor.c"
 nx build -L --no-link "${override[@]}" .#cubrid-optdebug > "$R/rebuild-optdebug.log" 2>&1
 mark rebuilt_optdebug_ccache
-dev ccache -s > "$R/ccache-after.txt" 2>&1 || true
+CCACHE_DIR=/nix/var/cache/ccache dev ccache -s > "$R/ccache-after.txt" 2>&1 || true
 
 for m in optdebug release; do
   dev just smoke ".scratch/install/cubrid-$m" "smoke-$m" > "$R/smoke-$m.log" 2>&1
