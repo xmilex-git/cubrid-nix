@@ -14,8 +14,10 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-# 
 #
+#
+# Modified for cubrid-nix: exits early when the library already exists, so CTP's
+# make_locale reuses the one the runner built once per install (ctp/ctp_run.sh).
 APP_NAME=$0
 
 show_usage ()
