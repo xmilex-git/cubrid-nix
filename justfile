@@ -4,12 +4,17 @@
 #   just seal <worktree>                        record new sealed inputs (D7), needs network
 #   just smoke <install>                        server + csql + PL/CSQL in a run directory (D2)
 #   just ctp <sql|medium> <install> [args]     CTP in unshare shards (D8)
-#   just cache-push <dir> [key]                 fill the LAN binary cache directory (ADR 0002)
+#   just cache-update [dir]                     after a flake.nix/flake.lock/nix change: both
+#                                               binary caches (docs/cache-maintenance.md)
+#   just cache-push [dir] [key]                 fill the LAN binary cache directory (ADR 0002)
+#   just cache-publish [dir]                    our own paths to the GitHub release cache
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 scratch := justfile_directory() / ".scratch"
 nix := "nix --extra-experimental-features 'nix-command flakes'"
+# the LAN cache's directory; the LAN server reads it as it is
+cache_dir := env_var_or_default("CUBRID_NIX_CACHE_DIR", "/bench/ssd/cubrid-nix-cache/cache")
 
 default:
     @just --list
@@ -77,7 +82,7 @@ ctp suite install *args:
 # nixpkgs' own paths and the flake's inputs included, signed and zstd-compressed into a
 # nix file cache that `cache-server-image` serves. Paths already there are skipped.
 # Fill or update the LAN binary cache directory (ADR 0002)
-cache-push dir key="":
+cache-push dir=cache_dir key="":
     #!/usr/bin/env bash
     set -euo pipefail
     key="{{key}}"
@@ -89,12 +94,7 @@ cache-push dir key="":
     [ -e "$dir/nix-cache-info" ] || printf 'StoreDir: /nix/store\nWantMassQuery: 1\nPriority: 30\n' > "$dir/nix-cache-info"
     to="file://$dir?compression=zstd&parallel-compression=true&secret-key=$key"
     cd "{{justfile_directory()}}"
-    mapfile -t roots < <({{nix}} build --no-link --print-out-paths \
-      .#devShells.x86_64-linux.default.inputDerivation \
-      .#cubrid-optdebug.inputDerivation .#cubrid-release.inputDerivation)
-    # the shell `nix develop` starts, with every output
-    mapfile -t -O "${#roots[@]}" roots < <({{nix}} build --no-link --print-out-paths \
-      --inputs-from . 'nixpkgs#bashInteractive^*')
+    mapfile -t roots < <(scripts/cache-roots.sh)
     # A path written to after it was built would be served with a wrong hash.
     {{nix}} store verify --no-trust --recursive "${roots[@]}" \
       || { echo "modified store paths above: 'nix store repair <path>', then push again" >&2; exit 1; }
@@ -104,6 +104,17 @@ cache-push dir key="":
     pub=$({{nix}} key convert-secret-to-public < "$key")
     {{nix}} store verify --store "file://$dir" --trusted-public-keys "$pub" --recursive "${roots[@]}"
     echo "cache: $dir ($(du -sh "$dir" | cut -f1)), public key $pub"
+
+# The paths no public cache has, from the cache directory, as the assets of this repo's
+# `nix-cache` release: the cache for machines the LAN cache does not reach (ADR 0002 D7).
+# Publish our own paths to the GitHub release cache
+cache-publish dir=cache_dir:
+    "{{justfile_directory()}}/scripts/cache-publish.sh" "{{dir}}"
+
+# Run it after pushing a change to flake.nix, flake.lock or nix/: it refills the LAN
+# cache, which its server serves as it is, then brings the GitHub cache in line.
+# Update both binary caches (docs/cache-maintenance.md)
+cache-update dir=cache_dir: (cache-push dir) (cache-publish dir)
 
 # Ports are the install's defaults: run it where they are private.
 # Server, csql and PL/CSQL on an install, in a fresh run directory

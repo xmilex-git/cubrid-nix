@@ -39,8 +39,8 @@ EOF
 `nix upgrade-nix`를 실행한다.
 
 `extra-sandbox-paths`는 `nix build`의 샌드박스가 ccache를 쓰게 한다. user namespace를 만들 수 없는
-환경(권한 없는 컨테이너 등)이면 `sandbox = false`도 한 줄 더 둔다. 사내망 머신이면
-[사내 바이너리 캐시](#사내-바이너리-캐시)의 두 줄도 넣는다.
+환경(권한 없는 컨테이너 등)이면 `sandbox = false`도 한 줄 더 둔다. [바이너리 캐시](#바이너리-캐시)의
+두 줄도 넣는다. 사내망이면 사내 캐시를, 외부 환경이면 GitHub 캐시를 쓴다.
 
 ### 2. 이 레포와 개발 셸
 
@@ -51,7 +51,7 @@ nix develop
 ```
 
 첫 `nix develop`은 12–18분 걸린다(64코어). 공개 캐시에 없는 CI 버전 도구(perl, git, bison, indent,
-astyle)를 소스에서 빌드하기 때문이다. 사내 캐시를 쓰면 20초 안쪽이다. 두 번째부터는 바로 뜬다. git, just, gdb, perf를 비롯해 아래
+astyle)를 소스에서 빌드하기 때문이다. 바이너리 캐시를 쓰면 빌드 없이 받기만 한다(사내 캐시로 18초). 두 번째부터는 바로 뜬다. git, just, gdb, perf를 비롯해 아래
 단계에 필요한 도구는 모두 이 셸에 있다.
 
 ### 3. CUBRID 소스
@@ -183,32 +183,37 @@ just seal ~/cubrid
 
 3rdparty 목록은 엔진의 `3rdparty/CMakeLists.txt`에서 읽으므로 따로 할 일이 없다.
 
-## 사내 바이너리 캐시
+## 바이너리 캐시
 
-사내망에는 새 환경이 받거나 빌드할 것을 모두 미리 서명해 둔 nix 캐시가 있다
-([ADR 0002](docs/adr/0002-lan-binary-cache.md)). 1단계의 `nix.conf`에 아래 두 줄을 더하면, 첫
-`nix develop`이 도구를 빌드하지 않고 이 캐시에서 받는다.
+새 환경이 빌드할 CI 버전 도구를 미리 서명해 둔 nix 캐시가 두 곳에 있다
+([ADR 0002](docs/adr/0002-lan-binary-cache.md)). 1단계의 `nix.conf`에 한쪽의 두 줄을 더하면, 첫
+`nix develop`이 도구를 빌드하지 않고 캐시에서 받는다. 공개 키는 두 곳이 같다.
+
+사내망에서는 새 환경에 필요한 것을 모두 담은 사내 캐시를 쓴다.
 
 ```
 extra-substituters = http://192.168.6.4
 extra-trusted-public-keys = cubrid-nix-cache-1:9tHaV41AhMl1GxTpdkaMjzH+V3/FiXx2F4hto1pcd+U=
 ```
 
-- 캐시에 닿지 않는 머신에는 이 줄을 넣지 않는다. nix가 연결을 기다리느라 느려진다.
-- HTTP 프록시를 쓰는 환경이면 `no_proxy`에 `192.168.6.4`를 더한다.
-- 클린룸 콜드 스타트는 캐시 없이 12–18분이었고, 이 캐시를 쓰니 127초였다.
-  - 그중 `nix develop` 단계는 10–15분에서 18초가 됐다.
-  - 나머지는 nix 설치(38초)와 엔진·테스트케이스 clone(1분)이다.
+외부 환경(사내 캐시에 닿지 않는 클라우드 등)에서는 GitHub 캐시를 쓴다. 이 레포의 `nix-cache` 릴리스에
+있고, 공개 캐시에 없는 우리 경로만 담았다. 나머지는 cache.nixos.org에서 받는다.
 
-캐시를 채우고 내보내는 쪽은 이렇게 한다.
-
-```bash
-just cache-push <캐시 디렉터리>    # flake.lock이나 nix/가 바뀔 때마다. 이미 있는 경로는 건너뛴다
-nix build .#cache-server-image     # nginx 서버 이미지. podman load로 올린다
+```
+extra-substituters = https://github.com/xmilex-git/cubrid-nix/releases/download/nix-cache
+extra-trusted-public-keys = cubrid-nix-cache-1:9tHaV41AhMl1GxTpdkaMjzH+V3/FiXx2F4hto1pcd+U=
 ```
 
-- 서버 컨테이너는 캐시 디렉터리를 `/cache`에 읽기 전용으로 마운트하고 80번 포트로 내보낸다.
-- 서명 키를 만드는 법과, 잃었을 때 할 일은 ADR 0002에 있다.
+- 닿지 않는 캐시는 넣지 않는다. nix가 연결을 기다리느라 느려진다.
+- HTTP 프록시를 쓰는 환경에서 사내 캐시를 쓰면 `no_proxy`에 `192.168.6.4`를 더한다.
+- 클린룸 콜드 스타트는 캐시 없이 12–18분이었다.
+  - 사내 캐시로는 127초였고, 그중 `nix develop` 단계는 18초였다.
+  - GitHub 캐시로는 285초였고, 그중 `nix develop` 단계는 114초였다. 이 호스트의 프록시를 거쳐 초당
+    7MB쯤으로 받은 값이라, 클라우드에서는 더 빠를 수 있다.
+  - 나머지는 nix 설치와 엔진·테스트케이스 clone이다.
+
+`flake.nix`, `flake.lock`, `nix/`를 바꾼 뒤에는 `just cache-update` 하나로 두 캐시를 갱신한다. 자세한
+절차는 [캐시 갱신 지침](docs/cache-maintenance.md)에 있다.
 
 ## 알려진 한계
 
@@ -218,7 +223,7 @@ nix build .#cache-server-image     # nginx 서버 이미지. podman load로 올�
   - `just shell-build`는 호스트의 `/usr/include/malloc.h`가 CI의 것(glibc 2.28)과 같을 때만 된다. 엔진
     소스 한 곳이 이 파일을 절대 경로로 include하기 때문이다. 다르면 `just build`를 쓴다.
   - CTP는 샤드 하나가 격리 없이 돈다.
-- 사내 캐시가 닿지 않는 머신에서 첫 `nix develop`은 12–18분이다. CI 버전 도구를 소스에서 빌드한다.
+- 바이너리 캐시를 쓰지 않으면 첫 `nix develop`은 12–18분이다. CI 버전 도구를 소스에서 빌드한다.
 - nix는 URL마다 한 번씩만 받기를 시도한다. 프록시나 미러의 일시적 오류로 실패하면 `nix develop`을 다시
   실행한다. 이미 받은 것은 다시 받지 않는다.
 - `~/.cache/cubrid-nix/locale`은 저절로 비워지지 않는다. 설치본 하나에 19MB쯤이다.
