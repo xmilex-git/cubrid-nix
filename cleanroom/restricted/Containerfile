@@ -1,0 +1,7 @@
+# The restricted cloud (ADR 0003): Debian trixie with gcc/g++ 14.2, make and a Java 21
+# runtime, and an ordinary user of uid 1000. No nix, gdb, cmake, ninja or javac.
+FROM docker.io/library/debian:trixie
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gcc g++ make openjdk-21-jre-headless git curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN useradd -m -u 1000 -s /bin/bash cloud

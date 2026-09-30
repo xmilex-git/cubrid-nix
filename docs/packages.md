@@ -12,6 +12,8 @@ nix 개발 환경에 들어 있는 것마다, 빠지면 어느 단계가 어떻�
 | 개발 셸과 빌드 입력까지 받은 스토어(콜드 스타트 직후) | 3.3 GiB |
 | CUBRID 설치본 optdebug / release | 814 MB / 763 MB (closure 1.1 / 1.0 GiB) |
 | 빌드 두 벌과 재빌드까지 한 스토어 | 6.0 GiB |
+| 사용자 스토어, 설치 직후(`install.sh`, 제한 클라우드 흉내) | 1.3 GiB. 받은 것은 경로 137개 432.5 MiB |
+| 사용자 스토어의 홈, shell-build·CTP·셸 케이스까지 한 뒤 | 10 GiB쯤. 스토어 2.7G, 엔진과 빌드 트리 4.2G |
 
 ## CI 툴체인 스냅샷 (Rocky 8.10 RPM, `nix/rpms/*.json`)
 
@@ -52,16 +54,39 @@ nix 개발 환경에 들어 있는 것마다, 빠지면 어느 단계가 어떻�
 
 | 패키지 | 빠지면 |
 |---|---|
-| util-linux (unshare, nsenter, mount) | 샤드를 격리하지 못한다. 러너가 직접 샤드 하나로 내려간다. |
-| iproute2 (ip) | 샤드의 네트워크 네임스페이스에서 loopback을 켜지 못한다. |
-| procps, lsof, bc, nettools, rsync, zip, gnutar, gzip | CTP 스크립트, 러너의 시나리오 복사, hang 증거 수집이 쓴다. |
+| util-linux minimal (unshare, nsenter, mount, ipcs, ipcrm) | 샤드를 격리하지 못한다. 러너가 직접 샤드 하나로 내려간다. 셸 케이스의 `finish`가 공유 메모리를 정리하지 못한다. |
+| iproute2 (ip, ss), iptables·elfutils·libbpf 없이 | 샤드의 네트워크 네임스페이스에서 loopback을 켜지 못한다. `make shell-case`가 포트를 확인하지 못한다. |
+| procps(systemd 없이), lsof, bc, nettools, rsync, zip, gnutar, gzip | CTP 스크립트, 러너의 시나리오 복사, hang 증거 수집이 쓴다. |
 | glibc 로케일(en_US, en_US.UTF-8, ko_KR) | CTP 도구가 `LC_ALL=en_US`를 쓸 수 없다. |
 | eatmydata(스냅샷 glibc로 빌드) | volatile overlay를 못 쓰는 환경에서 fsync가 켜진 채로 돈다. |
-| just, curl, unzip | 레시피와 봉인 갱신이 쓴다. |
+| curl minimal, unzip | 봉인 갱신이 쓴다. |
 
 ## 진단
 
 | 패키지 | 빠지면 |
 |---|---|
-| gdb 15.2 | 코어를 판독하지 못한다. 래퍼가 스냅샷 glibc의 `libthread_db`를 쓴다. |
-| perf 6.6 | 프로파일을 잡지 못한다. addr2line 제한 시간을 60초로 둔다. |
+| gdb 15.2(source-highlight, debuginfod 없이, 호스트 CPU만) | 코어를 판독하지 못한다. 래퍼가 스냅샷 glibc의 `libthread_db`를 쓴다. |
+
+perf는 뺐다(ADR 0003 D11). 레시피는 Makefile이 부르므로 just도 없다. make는 CI 버전 도구의
+make 4.2.1이고, 개발 셸 밖에서는 호스트의 GNU make가 Makefile을 읽는다.
+
+## 변형으로 뺀 빌드 의존성 (ADR 0003 D3)
+
+사용자 스토어는 closure를 모두 소스에서 빌드한다. 아래 변형은 빌드에만 무겁게 들던 것을 뺀다.
+
+| 패키지 | 뺀 것 | 그것이 끌고 오던 것 |
+|---|---|---|
+| gdb | source-highlight, debuginfod | boost, elfutils의 debuginfod 클라이언트 |
+| procps | systemd | LLVM·clang(systemd의 BPF 프로그램) |
+| iproute2 | iptables, elfutils, libbpf | boost, gtk-doc |
+| util-linux | 전체판 대신 minimal | systemd와 그것의 LLVM·clang, boost(derivation 408개) |
+| git, curl | curl 전체판 대신 minimal | PAM, brotli, libpsl 등(derivation 105개) |
+| ccache | 매뉴얼(asciidoctor), 테스트 | Ruby, 그 JIT의 Rust와 LLVM |
+| CI 스냅샷 | rpm2cpio·cpio 대신 bsdtar | rpm의 매뉴얼을 만드는 pandoc(GHC) |
+
+## 설치 (`install.sh`)
+
+| 항목 | 빠지면 |
+|---|---|
+| nix 2.35.3 정적 빌드(Hydra 빌드 346771304, sha256 `87d01ef8…eb507`) | root 없이 nix를 쓸 수 없다. 공식 설치 스크립트는 `/nix`를 만든다. |
+| 호스트의 curl 또는 wget, CA 번들, git | nix 바이너리를 받지 못한다. TLS 검증은 끄지 않는다. git은 이 레포와 엔진을 받는다. |

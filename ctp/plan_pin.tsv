@@ -1,5 +1,5 @@
 # shards=16 unit=dir suite=sql testcases=develop@4004f1e13bce run=sql-20260924T044116Z-3751818
-# plan_pin.tsv — the verified 16-shard plan that a whole-suite `just ctp sql`
+# plan_pin.tsv — the verified 16-shard plan that a whole-suite `make ctp SUITE=sql`
 # keeps (ADR 0017 D9; resolve_pin in scripts/ctp_run.sh). One "<unit>\t<shard>"
 # row per cases dir ("<dir>#<k>" for a split.tsv chunk).
 #

@@ -3,9 +3,9 @@
 # nix installer's prerequisites, as an ordinary user. Two phases share /nix and the home:
 #   prepare  with network: nix (the latest stable, or CLEANROOM_NIX_VERSION), the dev
 #            shell, the sources, every build input
-#   verify   --network=none: builds, a ccache rebuild, smoke, CTP (+ perf, gdb in full)
+#   verify   --network=none: builds, a ccache rebuild, smoke, CTP (+ gdb in full)
 # Modes:
-#   full   privileged container: nix build sandbox, parallel CTP shards, perf, gdb
+#   full   privileged container: nix build sandbox, parallel CTP shards, gdb
 #   plain  default permissions: no sandbox, one direct CTP shard (the degraded path)
 # Results land in .scratch/cleanroom/<mode>-<time>/{prepare.log,verify.log,home/results/}.
 set -euo pipefail

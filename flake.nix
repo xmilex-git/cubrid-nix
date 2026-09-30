@@ -21,7 +21,16 @@
   outputs = { self, nixpkgs, cubrid-src, cubrid-testtools }:
     let
       system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
+      # A store off /nix builds nixpkgs itself (ADR 0003 D3). libarchive's bsdcpio tests
+      # (test_basic, test_format_newc) then fail whenever the build directory's filesystem
+      # hands out an inode number above 2^32, as XFS does; Hydra's build of the same source
+      # passed them, and a /nix store takes that build from cache.nixos.org.
+      pkgs =
+        if builtins.storeDir == "/nix/store" then nixpkgs.legacyPackages.${system}
+        else import nixpkgs {
+          inherit system;
+          overlays = [ (_: prev: { libarchive = prev.libarchive.overrideAttrs (_: { doCheck = false; }); }) ];
+        };
       fetchRpms = import ./nix/rpms.nix { inherit (pkgs) lib fetchurl; };
       snapshot = pkgs.callPackage ./nix/snapshot.nix { inherit fetchRpms; };
       toolchain = pkgs.callPackage ./nix/toolchain.nix { inherit snapshot; };
@@ -30,27 +39,6 @@
       sealedFor = src: pkgs.callPackage ./nix/sealed.nix { } src;
       cubridFor = pkgs.callPackage ./nix/cubrid.nix { inherit toolchain tools sealedFor; };
 
-      # The seed script for a worktree on disk (the dev shell's incremental builds): only
-      # the three files that declare the sealed inputs are read from it.
-      sealedSeedFor = ws:
-        let
-          root = /. + ws;
-          keep = [
-            "3rdparty/CMakeLists.txt"
-            "pl_engine/cmake/install_jdk.cmake"
-            "pl_engine/gradle/wrapper/gradle-wrapper.properties"
-          ];
-          rel = p: pkgs.lib.removePrefix (toString root + "/") (toString p);
-          src = builtins.path {
-            path = root;
-            name = "cubrid-sealed-declarations";
-            filter = p: type:
-              let r = rel p; in
-              builtins.elem r keep
-              || (type == "directory" && builtins.any (k: pkgs.lib.hasPrefix (r + "/") k) keep);
-          };
-        in
-        (sealedFor src).seed;
 
       # fsync without a volatile overlay (ADR 0001 D8): compiled by the snapshot's toolchain
       # (glibc 2.28 symbol versions, which every newer glibc also provides) and left without
@@ -71,15 +59,13 @@
         locales = [ "en_US.UTF-8/UTF-8" "en_US/ISO-8859-1" "ko_KR.UTF-8/UTF-8" "ko_KR.EUC-KR/EUC-KR" ];
       };
 
-      perfConfig = pkgs.writeText "perfconfig" ''
-        [core]
-        	addr2line-timeout = 60000
-      '';
-
+      # gdb without source-highlight (boost) and debuginfod: neither is used, and a store off
+      # /nix builds its whole closure from source (ADR 0003 D3)
+      gdbMinimal = pkgs.gdb.override { sourceHighlight = null; enableDebuginfod = false; hostCpuOnly = true; };
       # gdb reads CUBRID's threads through the libthread_db of the snapshot's glibc 2.28; gdb
       # loads it only from a safe path, and /nix/store's is not one by default.
       # `nix build` compiles in /build/source: with CUBRID_NIX_SRC set to the source it
-      # was exported to (just build prints it), gdb shows the source text too.
+      # was exported to (make build prints it), gdb shows the source text too.
       # gdb's Python writes .pyc files next to its modules. As root in a user namespace
       # over a single-user install, that is inside gdb's own store path, which it
       # modifies (and a binary cache would then serve it with a wrong hash).
@@ -87,12 +73,12 @@
         sub=()
         [ -z "''${CUBRID_NIX_SRC:-}" ] || sub=(-iex "set substitute-path /build/source $CUBRID_NIX_SRC")
         export PYTHONDONTWRITEBYTECODE=1
-        exec ${pkgs.gdb}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' \
+        exec ${gdbMinimal}/bin/gdb -iex 'set libthread-db-search-path ${snapshot}/usr/lib64:$pdir' \
           -iex 'add-auto-load-safe-path ${snapshot}/usr/lib64' "''${sub[@]}" "$@"
       '';
 
       # The LAN binary cache's server (ADR 0002): nginx serves the cache directory that
-      # `just cache-push` fills, mounted read-only at /cache. A docker archive built from
+      # `make cache-push` fills, mounted read-only at /cache. A docker archive built from
       # nixpkgs, so `podman load` needs no registry.
       cacheServerConf = pkgs.writeText "nginx.conf" ''
         user nobody nobody;
@@ -131,7 +117,12 @@
     in
     {
       lib.${system} = {
-        inherit sealedFor sealedSeedFor;
+        inherit sealedFor;
+        # The seed script of the dev shell's incremental builds, for the sealed inputs the
+        # cubrid-src input declares. scripts/shell-build.sh overrides that input with the
+        # three declaring files of a worktree: an --impure evaluation cannot read this flake
+        # through a symlinked store (ADR 0003 D1).
+        sealedSeed = (sealedFor cubrid-src).seed;
         ctpHome = "${cubrid-testtools}/CTP";
       };
 
@@ -139,16 +130,31 @@
       # wrapper: gcc is the CI toolchain's.
       devShells.${system}.default = pkgs.mkShellNoCC {
         name = "cubrid-nix";
-        packages = [ toolchain gdb pkgs.linuxPackages.perf ]
+        packages = [ toolchain gdb ]
           ++ builtins.attrValues tools
-          ++ (with pkgs; [ python3 which file just curl unzip ])
-          # what CTP and the shard runner call (ADR 0001 D8: nixpkgs' versions)
-          ++ (with pkgs; [ procps iproute2 util-linux lsof bc nettools rsync zip gnutar gzip ]);
+          ++ (with pkgs; [ python3 which file curlMinimal unzip ])
+          # what CTP and the shard runner call (ADR 0001 D8: nixpkgs' versions). The variants
+          # leave out systemd (LLVM for its BPF programs), iptables (boost) and the BPF loaders
+          # of iproute2 (elfutils, libbpf): the shards only run `ip link set lo up` (ADR 0003).
+          ++ [ (pkgs.procps.override { withSystemd = false; }) (pkgs.iproute2.override { iptables = null; elfutils = null; libbpf = null; })
+               pkgs.util-linuxMinimal ]
+          ++ (with pkgs; [ lsof bc nettools rsync zip gnutar gzip ]);
         shellHook = ''
           export JAVA_HOME=${tools.temurin8}
           export M4=${snapshot}/usr/bin/m4
           export CC="ccache gcc" CXX="ccache g++" CCACHE_COMPILERCHECK=content
           export CCACHE_DIR=''${CCACHE_DIR:-$HOME/.cache/ccache}
+          # build.sh's ninja 1.11 runs nproc + 2 jobs, whatever the cgroup's CPU quota
+          # allows: under a quota of 4 on a large host that many compilers run out of memory
+          if [ -z "''${CMAKE_BUILD_PARALLEL_LEVEL:-}" ]; then
+            n=$(nproc) q=max p=1
+            read -r q p 2>/dev/null < /sys/fs/cgroup/cpu.max \
+              || { read -r q 2>/dev/null < /sys/fs/cgroup/cpu/cpu.cfs_quota_us \
+                   && read -r p < /sys/fs/cgroup/cpu/cpu.cfs_period_us; } || :
+            case "$q" in max|-1|"") ;; *) [ $(( (q + p - 1) / p )) -ge "$n" ] || n=$(( (q + p - 1) / p )) ;; esac
+            export CMAKE_BUILD_PARALLEL_LEVEL=$n
+            unset n q p
+          fi
           # a Gradle home of its own: the seed puts the sealed repository in its init.d
           export GRADLE_USER_HOME=''${CUBRID_NIX_GRADLE_HOME:-$HOME/.cache/cubrid-nix/gradle-home}
           export CUBRID_CI_SNAPSHOT=${snapshot}
@@ -158,8 +164,6 @@
           unset SOURCE_DATE_EPOCH
           export TZDIR=${snapshot}/usr/share/zoneinfo
           export LOCALE_ARCHIVE=${ctpLocales}/lib/locale/locale-archive
-          # perf's addr2line needs more than its default time on CUBRID's 180 MB libraries
-          export PERF_CONFIG=${perfConfig}
           # no debuginfod: other distributions' build-ids never match the snapshot's
           export DEBUGINFOD_URLS=
           # for ctp/ctp_run.sh

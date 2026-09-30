@@ -1,6 +1,6 @@
 # The CI toolchain snapshot (ADR 0001 D4, D9): the CI images' Rocky 8.10 RPMs
 # unpacked into one tree that runs from the store on any Linux distribution.
-{ lib, stdenvNoCC, rpm, cpio, patchelf, fetchRpms }:
+{ lib, stdenvNoCC, libarchive, patchelf, fetchRpms }:
 
 let
   rpms = fetchRpms ./rpms/build-toolchain.json ++ fetchRpms ./rpms/runtime-data.json;
@@ -15,7 +15,8 @@ stdenvNoCC.mkDerivation {
   # These are the CI's binaries: only the explicit patchelf below may change them.
   dontFixup = true;
 
-  nativeBuildInputs = [ rpm cpio patchelf ];
+  # bsdtar reads RPM payloads itself; rpm2cpio's package builds its manual with pandoc (GHC)
+  nativeBuildInputs = [ libarchive patchelf ];
 
   installPhase = ''
     runHook preInstall
@@ -28,8 +29,10 @@ stdenvNoCC.mkDerivation {
     ln -s usr/lib64 $out/lib64
 
     cd $out
+    # -P: a payload extracts through the links made above and by earlier RPMs (sbin ->
+    # usr/sbin). Every entry of these hash-pinned RPMs is ./-relative, without "..".
     for r in ${lib.concatStringsSep " " rpms}; do
-      rpm2cpio "$r" | cpio -idm --quiet --no-absolute-filenames
+      bsdtar -xpPf "$r"
       # payload directories can be read-only and would block the next RPM
       chmod -R u+w $out
     done

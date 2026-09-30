@@ -161,6 +161,8 @@ workspace 호스트의 기존 흐름(`just build`, podman 기반 `just ctp`)은 
 - **시스템 라이브러리 debuginfo는 넣지 않는다 (사용자 결정 2026-09-30).** Rocky 8.10의 glibc·libstdc++
   debuginfo RPM(합 7 MB)을 넣으면 glibc 내부 함수의 줄 번호까지 보이지만, 필요 없다고 정했다. CI처럼
   glibc 프레임은 함수 이름만 보인다.
+- **바뀐 것 (2026-09-30):** perf를 뺐다(사용자 결정: 쓰지 않는다). [ADR 0003](0003-user-store-without-root.md)
+  D11을 본다. gdb와 심볼 규칙은 그대로다.
 
 ## D11 — 보장 문구
 
@@ -189,6 +191,9 @@ workspace 호스트의 기존 흐름(`just build`, podman 기반 `just ctp`)은 
     그대로 맞는다.
   - README와 클린룸은 기본으로 최신 안정판을 설치한다. 클린룸은 `CLEANROOM_NIX_VERSION`을 주면 그 버전으로
     다시 돈다.
+- **바뀐 것 (2026-09-30):** root, `/nix`, user namespace가 없는 원격 환경을 위해 사용자 권한 설치를
+  더했다([ADR 0003](0003-user-store-without-root.md)). 그 경로는 제한 클라우드 검증
+  (`cleanroom/restricted`)이 확인한다. 이 클린룸은 `/nix` 경로를 확인한다.
 
 ## D13 — 최소성
 

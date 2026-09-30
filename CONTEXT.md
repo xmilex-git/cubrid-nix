@@ -9,7 +9,7 @@ CUBRID 빌드(nix derivation)와 서버 실행·CTP에 쓰는 도구를 `flake.l
 _Avoid_: nix 프로파일(`nix profile install`로 PATH에만 올린 묶음과 혼동), 컨테이너 이미지
 
 **CI 툴체인 스냅샷 (CI toolchain snapshot)**:
-CI 빌드 이미지 한 digest에 설치된 Rocky 8.10 RPM 가운데 제품에 닿는 것 — 컴파일러, 링커, libc와 커널 헤더, libstdc++, 링크되는 C 라이브러리, 코드를 생성하는 도구 — 을 내용 해시로 고정한 묶음이다. 호스트 배포판과 무관하게 `/nix/store`에서 돈다.
+CI 빌드 이미지 한 digest에 설치된 Rocky 8.10 RPM 가운데 제품에 닿는 것 — 컴파일러, 링커, libc와 커널 헤더, libstdc++, 링크되는 C 라이브러리, 코드를 생성하는 도구 — 을 내용 해시로 고정한 묶음이다. 호스트 배포판과 무관하게 nix 스토어에서 돈다.
 _Avoid_: sysroot(그 일부), 툴체인 이미지, RPM 설치(설치하지 않고 풀어서 쓴다)
 
 **봉인 입력 (sealed inputs)**:
@@ -17,7 +17,7 @@ _Avoid_: sysroot(그 일부), 툴체인 이미지, RPM 설치(설치하지 않�
 _Avoid_: 캐시(지워도 다시 받는 임시본과 혼동), 오프라인 빌드(수단과 혼동)
 
 **설치본 (install)**:
-빌드가 만든 실행 가능한 CUBRID 디렉터리다. `nix build`의 설치본은 `/nix/store` 아래에 있어 읽기 전용이다.
+빌드가 만든 실행 가능한 CUBRID 디렉터리다. `nix build`의 설치본은 nix 스토어 아래에 있어 읽기 전용이다.
 _Avoid_: 빌드(행위·빌드 트리와 혼동)
 
 **실행 디렉터리 (run directory)**:
@@ -33,20 +33,40 @@ _Avoid_: 컨테이너(workspace 러너의 격리 단위), 노드, 버킷
 _Avoid_: 로케일 데이터(CUBRID 프로세스의 `setlocale`이 읽는 glibc 로케일 파일과 혼동), 로케일 빌드(엔진 빌드와 혼동)
 
 **직접 샤드 (direct shard)**:
-네임스페이스를 만들 수 없는 환경에서 러너가 격리 없이 하나만 돌리는 샤드다. CTP teardown이 이 사용자의 모든 `cub_*`를 죽이므로 CUBRID 전용 환경을 전제로 하고, fsync는 eatmydata로 끈다.
+네임스페이스를 만들 수 없는 환경에서 러너가 격리 없이 하나만 돌리는 샤드다. CTP teardown이 이 사용자의 모든 `cub_*`를 죽이므로 CUBRID 전용 환경을 전제로 한다. 이 사용자의 CUBRID 프로세스가 이미 있으면 러너는 시작하지 않는다. fsync는 eatmydata로 끈다.
 _Avoid_: 호스트 실행(격리 없는 CTP를 권하는 말로 들림), 폴백 모드
 
 **사내 바이너리 캐시 (LAN binary cache)**:
-새 환경이 `nix develop`과 빌드에 쓸 스토어 경로를 미리 서명해 둔 nix 파일 캐시다. 사내 서버가 이것을 내보낸다. 캐시가 닿는 머신은 도구를 빌드하지 않고 받기만 한다.
+새 환경이 `nix develop`과 빌드에 쓸 스토어 경로를 미리 서명해 둔 nix 파일 캐시다. 사내 서버가 이것을 내보낸다. 캐시가 닿는 머신은 도구를 빌드하지 않고 받기만 한다. `/nix/store`와 사용자 스토어가 캐시를 따로 가진다.
 _Avoid_: 공개 캐시(cache.nixos.org와 혼동), 빌드 캐시(ccache와 혼동)
 
 **GitHub 캐시 (release cache)**:
-이 레포의 `nix-cache` 릴리스에 올린 nix 캐시다. 공개 캐시에 없는 우리 경로만 담는다. 사내 캐시에 닿지 않는 외부 환경이 쓰고, 나머지는 cache.nixos.org에서 받는다.
+이 레포의 릴리스에 올린 nix 캐시다. 사내 캐시에 닿지 않는 외부 환경이 쓴다. `/nix/store`의 것(`nix-cache`)은 공개 캐시에 없는 우리 경로만 담고, 나머지는 cache.nixos.org에서 받는다. 사용자 스토어의 것(`nix-cache-var-tmp-cubrid-nix-store`)은 closure 전부를 담는다.
 _Avoid_: 공개 캐시(cache.nixos.org와 혼동), 미러(전부를 복제한다는 뜻으로 들림)
 
+**사용자 스토어 (user store)**:
+root 없이 만든 nix 스토어 `/var/tmp/cubrid-nix/store`다. 실제 파일은 그 사용자의 홈에 있고, `/var/tmp/cubrid-nix`가 그곳을 가리키는 링크다. 스토어 경로가 누구에게나 같아서 캐시를 나눠 쓴다. `/nix/store`와는 경로가 달라서 서로의 캐시를 쓰지 못한다. 호스트 하나에서는 한 사용자만 가질 수 있다.
+_Avoid_: 로컬 스토어(모든 스토어가 로컬), chroot 스토어(네임스페이스로 `/nix/store`에 붙이는 방식과 혼동), 홈 스토어(스토어 경로가 홈에 있는 것으로 들림)
+
+**환경 파일 (env file)**:
+`install.sh`가 쓰는 `env.sh`다. 새 셸마다 읽으면 그 셸이 이 사용자의 nix와 사용자 스토어를 쓴다. 사라진 `/var/tmp/cubrid-nix` 링크도 다시 만든다. 실행 디렉터리의 `cubrid.env`와는 다르다.
+_Avoid_: 프로파일(`nix profile`과 혼동), 활성화 스크립트(Python venv와 혼동)
+
+**셸 케이스 한 건 (single shell case)**:
+CTP 셸 가이드의 방식대로 셸 케이스 하나를 사본에서 돌리고, 판정과 정리 결과를 남기는 실행이다(`make shell-case`). shell 스위트 전체는 업스트림 CI가 돌린다.
+_Avoid_: shell 스위트(전체 실행과 혼동), 셸 테스트(CTP 밖의 스크립트와 혼동)
+
+**외부 코어 (external core)**:
+코어 덤프가 막힌 환경이 판독하는, 다른 환경에서 같은 설치본이 쓴 코어다. 설치본은 바이너리 캐시로 받아 바이트까지 같게 한다.
+_Avoid_: 원격 코어(원격 디버깅과 혼동)
+
 **클린룸 검증 (clean-room check)**:
-nix만 설치한 새 컨테이너에서 보장 범위가 통과함을 보이는 수용 시험이다. 권한 있는 컨테이너와 기본 권한 컨테이너에서 한 번씩 돈다.
+nix만 설치한 새 컨테이너에서 보장 범위가 통과함을 보이는 수용 시험이다. `/nix` 경로를 확인하며, 권한 있는 컨테이너와 기본 권한 컨테이너에서 한 번씩 돈다.
 _Avoid_: 스모크(부분 확인과 혼동)
+
+**제한 클라우드 검증 (restricted-cloud check)**:
+root, `/nix`, user namespace, 코어 덤프가 없는 원격 환경을 흉내 낸 컨테이너에서, 사용자 권한 설치부터 셸 케이스 한 건까지가 통과함을 보이는 수용 시험이다(`cleanroom/restricted`). 흉내 낸 곳에서 통과한 것이지, 그 원격 환경 자체에서 통과한 것은 아니다.
+_Avoid_: 클라우드 검증 완료(실제 원격 환경에서 확인한 것으로 들림)
 
 **보장 문구 (guarantee statement)**:
 이 레포가 어떤 조건에서 무엇이 된다고 약속하는지 적은 README의 한 절이다. 클린룸 검증이 그 문구가 사실인지 증명한다.

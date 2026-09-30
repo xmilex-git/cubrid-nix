@@ -15,6 +15,7 @@
 { src, mode }:
 
 let
+  ccacheDir = "${dirOf builtins.storeDir}/var/cache/ccache";
   sealed = sealedFor src;
   snapshot = toolchain.snapshot;
   # An exported source carries VERSION-DIST; any other source gets what build.sh stamps
@@ -76,10 +77,11 @@ stdenvNoCC.mkDerivation {
     export JAVA_HOME=${tools.temurin8}
     # bison and flex run the CI's m4
     export M4=${snapshot}/usr/bin/m4
-    # the CI image sets these; ccache runs only where the sandbox exposes a cache dir
+    # the CI image sets these; ccache runs only where the build sees a writable cache dir
+    # next to the store: <store parent>/var/cache/ccache (/nix/var/cache/ccache for /nix)
     export CC="ccache gcc" CXX="ccache g++" CCACHE_COMPILERCHECK=content
-    if [ -d /nix/var/cache/ccache ] && [ -w /nix/var/cache/ccache ]; then
-      export CCACHE_DIR=/nix/var/cache/ccache
+    if [ -d ${ccacheDir} ] && [ -w ${ccacheDir} ]; then
+      export CCACHE_DIR=${ccacheDir}
     else
       export CCACHE_DISABLE=1
     fi

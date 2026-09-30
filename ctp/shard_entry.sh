@@ -70,7 +70,7 @@ else
 
   # The run directory names the install by its absolute path (its links and wrappers).
   # The mounts below cover /mnt, /tmp and /home, so an install under one of them (a
-  # `just shell-build` prefix in the home directory) rides along in the shard dir and
+  # `make shell-build` prefix in the home directory) rides along in the shard dir and
   # is bound back at its own path once the layout is up.
   case "$INSTALL" in
     /home/*|/mnt/*|/tmp/*) install_covered=1 ;;

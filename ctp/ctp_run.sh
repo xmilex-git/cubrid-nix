@@ -61,7 +61,7 @@ ctp_run.sh — run one CUBRID CTP suite in isolated namespace shards (cubrid-nix
   ctp_run.sh --suite <sql|medium> --build <install> \
              --testcases <repo checkout> --ctp <CTP_HOME> [--out <dir>] [options]
 
-  Run it inside `nix develop` (or through `just ctp`): the shards use this shell's
+  Run it inside `nix develop` (or through `make ctp`): the shards use this shell's
   PATH for CTP's tools, and the recipe passes the pinned CTP and the locale archive.
 
 WHAT / WHY
@@ -153,7 +153,7 @@ ARG_EXCLUDE_SET=0
 ARG_TC_ASIS=0          # 1 = use --testcases verbatim, no ref resolution / worktree
 ARG_WT_ROOT=""         # where testcase worktrees live (default: <out>/../tc-worktrees)
 ARG_SHARDS=""
-ARG_CTP="${CUBRID_NIX_CTP:-}"   # the pinned CTP, passed by `just ctp` (ADR 0001 D8)
+ARG_CTP="${CUBRID_NIX_CTP:-}"   # the pinned CTP, from the dev shell (ADR 0001 D8)
 ARG_OUT=""
 ARG_UNIT="auto"       # split-unit mode: auto (per-suite default) | category (top-level _* "bulk") | dir | case
 declare -a ARG_ONLY=()   # scenario-relative subset prefixes ("" = whole suite)
@@ -473,8 +473,9 @@ materialize_tc_worktree_unlocked() {
 
 PROVENANCE=""
 build_provenance() {
-  PROVENANCE="$(printf 'install=%s runner=unshare nixpkgs=%s ctp=%s testcases=%s@%s(%.12s) suite=%s shards=%s ref-src=%s volatile=%s pinned=%s plan=%s' \
-    "${ARG_BUILD:-<none>}" "${CUBRID_NIX_NIXPKGS_REV:-unknown}" "$(ctp_revision)" \
+  PROVENANCE="$(printf 'install=%s runner=%s nixpkgs=%s ctp=%s testcases=%s@%s(%.12s) suite=%s shards=%s ref-src=%s volatile=%s pinned=%s plan=%s' \
+    "${ARG_BUILD:-<none>}" "$([ "$NS_MODE" -eq 1 ] && echo unshare || echo direct)" \
+    "${CUBRID_NIX_NIXPKGS_REV:-unknown}" "$(ctp_revision)" \
     "$SUITE_TCREPO" "$TC_REF" "${TC_SHA:-unknown}" "$ARG_SUITE" "$NSHARDS" "${TC_REF_SRC:-n/a}" \
     "${VOLATILE_TARGETS:-off}" "$(pinned_label | tr ' ' ',')" "$(printf '%s' "$PLAN_LABEL" | tr ' ' '_')")"
 }
@@ -524,7 +525,7 @@ NS_MODE=1   # 0: this environment cannot make namespaces; one shard runs directl
 host_preflight() {
   local t tool
   for tool in unshare nsenter ip readelf flock; do
-    command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH; run inside \`nix develop\` (or \`just ctp\`)."
+    command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH; run inside \`nix develop\` (or \`make ctp\`)."
   done
   [ -d /mnt ] || die "/mnt does not exist: each shard stages its directory there before it builds the CI layout on /home."
   [ -d /home ] || die "/home does not exist: each shard builds the CI container's layout there."
@@ -533,6 +534,11 @@ host_preflight() {
     warn "cannot create user, mount, PID and network namespaces here (unshare -Urmipnf --mount-proc failed)."
     warn "Running ONE shard directly (ADR 0001 D11). CTP's teardown kills every cub_* process of this"
     warn "user, so use an environment dedicated to this run."
+    # `pkill cub` matches these names: refuse rather than kill another run's servers
+    # (ADR 0003 D7)
+    if [ "$ARG_DRYRUN" -eq 0 ] && t="$(pgrep -a -u "$(id -u)" cub)"; then
+      die "this user already runs CUBRID processes, which CTP's teardown would kill:"$'\n'"$t"
+    fi
   fi
   if [ "$NS_MODE" -eq 0 ] && [ -n "$VOLATILE_TARGETS" ]; then
     VOLATILE_TARGETS=""; USE_EATMYDATA=1
@@ -1589,14 +1595,14 @@ setup_core_capture() {
   local pat; pat="$(cat /proc/sys/kernel/core_pattern 2>/dev/null)"
   case "$pat" in
     \|*) CORE_MODE="pipe"
-         err "WARNING: core_pattern pipes to a handler ('$pat'); per-shard cores cannot be"
-         err "         captured. Cores (if any) go to the host coredump store." ;;
+         warn "core_pattern pipes to a handler ('$pat'); per-shard cores cannot be"
+         warn "captured. Cores (if any) go to the host coredump store." ;;
     /*)  CORE_MODE="path"; CORE_DIR="$(dirname "$pat")"
          info "core capture: bind-mounting each shard's cores/ over '$CORE_DIR' (pattern '$pat')." ;;
     ?*)  CORE_MODE="relative"
          info "core capture: core_pattern is relative ('$pat'); will collect cores from shard copies." ;;
     *)   CORE_MODE="none"
-         err "WARNING: core_pattern is empty; cores may be disabled on this host." ;;
+         warn "core_pattern is empty; cores may be disabled on this host." ;;
   esac
 }
 

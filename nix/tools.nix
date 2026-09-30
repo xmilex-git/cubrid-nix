@@ -13,6 +13,7 @@
 , libxcrypt
 , gnumake42
 , gitMinimal
+, curlMinimal
 , ccache
 , buildPackages
 }:
@@ -151,7 +152,7 @@ let
     '';
   };
 
-  git = gitMinimal.overrideAttrs (_: {
+  git = (gitMinimal.override { curl = curlMinimal; }).overrideAttrs (_: {
     version = "2.43.7";
     src = fetchurl {
       url = "https://www.kernel.org/pub/software/scm/git/git-2.43.7.tar.xz";
@@ -211,6 +212,9 @@ let
   };
 in
 {
-  inherit temurin8 cmake ninja bison perl ant git indent astyle google-java-format ccache;
+  inherit temurin8 cmake ninja bison perl ant git indent astyle google-java-format;
+  # without the manual (asciidoctor needs Ruby, whose JIT needs Rust and LLVM), so without
+  # its man output, and without the tests
+  ccache = (ccache.override { asciidoctor = null; }).overrideAttrs (_: { doCheck = false; outputs = [ "out" ]; });
   make = gnumake42;
 }

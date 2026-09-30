@@ -4,7 +4,7 @@
 #   inside.sh prepare <full|plain>   with network: nix, the dev shell, the sources,
 #                                    every build input (the cold start)
 #   inside.sh verify  <full|plain>   --network=none: builds, ccache rebuild, smoke, CTP,
-#                                    and perf and gdb in full mode
+#                                    and gdb in full mode
 # Only committed files are tested: the repo is cloned from its mount.
 set -euo pipefail
 
@@ -85,21 +85,21 @@ mark rebuilt_optdebug_ccache
 CCACHE_DIR=/nix/var/cache/ccache dev ccache -s > "$R/ccache-after.txt" 2>&1 || true
 
 for m in optdebug release; do
-  dev just smoke ".scratch/install/cubrid-$m" "smoke-$m" > "$R/smoke-$m.log" 2>&1
+  dev make smoke INSTALL=".scratch/install/cubrid-$m" NAME="smoke-$m" > "$R/smoke-$m.log" 2>&1
   mark "smoke_$m"
 done
 
 export CUBRID_NIX_TESTCASES=$HOME/cubrid-testcases CUBRID_NIX_SRC=$SRC
 if [ "$mode" = full ]; then
-  dev just ctp sql .scratch/install/cubrid-optdebug --tc-ref develop > "$R/ctp-sql.log" 2>&1 || true
+  dev make ctp SUITE=sql INSTALL=.scratch/install/cubrid-optdebug TC_REF=develop > "$R/ctp-sql.log" 2>&1 || true
   mark ctp_sql
-  dev just ctp medium .scratch/install/cubrid-optdebug --tc-ref develop > "$R/ctp-medium.log" 2>&1 || true
+  dev make ctp SUITE=medium INSTALL=.scratch/install/cubrid-optdebug TC_REF=develop > "$R/ctp-medium.log" 2>&1 || true
   mark ctp_medium
   dev bash /cleanroom/diag.sh .scratch/install/cubrid-optdebug "$R" > "$R/diag.log" 2>&1 || true
   mark diag
 else
   # no namespaces: one direct shard over a subset (ADR 0001 D11)
-  dev just ctp sql .scratch/install/cubrid-optdebug --tc-ref develop --only _01_object/_04_trigger \
+  dev make ctp SUITE=sql INSTALL=.scratch/install/cubrid-optdebug TC_REF=develop ONLY=_01_object/_04_trigger \
     > "$R/ctp-sql-subset.log" 2>&1 || true
   mark ctp_sql_subset
 fi
