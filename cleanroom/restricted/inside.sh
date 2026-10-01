@@ -59,7 +59,7 @@ lsh() { bash -lc "$1"; }   # a login shell: ~/.profile sources env.sh (install.s
 proc_table() {
   local f l rest
   for f in /proc/[0-9]*/stat; do
-    read -r l < "$f" 2>/dev/null || continue
+    { read -r l < "$f"; } 2>/dev/null || continue
     rest=${l##*) }
     set -- $rest
     l=${l#*(}
