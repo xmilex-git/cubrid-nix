@@ -1592,7 +1592,14 @@ build_shard_workdir() {
 CORE_MODE="none"
 CORE_DIR=""
 setup_core_capture() {
-  local pat; pat="$(cat /proc/sys/kernel/core_pattern 2>/dev/null)"
+  local pat
+  # A container may hide the file or refuse to read it (ADR 0003 D13): under set -e a
+  # failed read must not end the run, it only means no core capture.
+  if ! pat="$(cat /proc/sys/kernel/core_pattern 2>/dev/null)"; then
+    CORE_MODE="none"; CORE_DIR=""
+    warn "core_pattern cannot be read here; cores are not captured."
+    return 0
+  fi
   case "$pat" in
     \|*) CORE_MODE="pipe"
          warn "core_pattern pipes to a handler ('$pat'); per-shard cores cannot be"
@@ -1780,8 +1787,13 @@ start_core_watchdog() {
   (
     declare -a cores_prev=() cores_mark=() pass_mark=() stopped=()
     hang_checked=$SECONDS
+    # The poll's sleep is a child that stop_core_watchdog's SIGTERM must end too: left
+    # running it would outlive the run, an orphan of PID 1 (ADR 0003 D12).
+    nap=""
+    trap 'kill "$nap" 2>/dev/null; wait "$nap" 2>/dev/null || :; exit 0' TERM
     while :; do
-      sleep "$CORE_POLL_SECS"
+      sleep "$CORE_POLL_SECS" & nap=$!
+      wait "$nap"
       reason=""
       avail_gb="$(df -BG --output=avail "$OUT" 2>/dev/null | tail -1 | tr -dc '0-9')"
       if [ -n "$avail_gb" ] && [ "$avail_gb" -lt "$DISK_FLOOR_GB" ]; then
